@@ -29,6 +29,27 @@ const BRACKET_TITLES: Record<Bracket, string> = {
   DOUBLES: "Anthony Prangley Silence of the Champs",
 };
 
+const BRACKET_ACCENTS: Record<
+  Bracket,
+  { border: string; background: string; highlight: string }
+> = {
+  MAIN: {
+    border: "rgba(59, 130, 246, 0.35)",
+    background: "rgba(59, 130, 246, 0.08)",
+    highlight: "rgba(59, 130, 246, 0.18)",
+  },
+  LOWER: {
+    border: "rgba(249, 115, 22, 0.35)",
+    background: "rgba(249, 115, 22, 0.08)",
+    highlight: "rgba(249, 115, 22, 0.18)",
+  },
+  DOUBLES: {
+    border: "rgba(147, 51, 234, 0.35)",
+    background: "rgba(147, 51, 234, 0.08)",
+    highlight: "rgba(147, 51, 234, 0.18)",
+  },
+};
+
 const STAGE_LABEL: Record<Stage, string> = {
   R1: "Round 1",
   QF: "Quarterfinals",
@@ -62,6 +83,16 @@ export default function MatchesPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [winner, setWinner] = useState<"A" | "B" | "">("");
+  const [expandedBrackets, setExpandedBrackets] = useState<Record<Bracket, boolean>>(
+    () =>
+      BRACKET_ORDER.reduce(
+        (acc, bracket) => ({
+          ...acc,
+          [bracket]: true,
+        }),
+        {} as Record<Bracket, boolean>
+      )
+  );
 
   const nameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -234,164 +265,213 @@ export default function MatchesPage() {
           {BRACKET_ORDER.map((bracket) => {
             const rounds = grouped[bracket];
             const hasMatches = STAGE_ORDER.some((stage) => rounds[stage].length > 0);
+            const totalMatches = STAGE_ORDER.reduce(
+              (count, stage) => count + rounds[stage].length,
+              0
+            );
+            const isExpanded = expandedBrackets[bracket];
+            const sectionId = `${bracket.toLowerCase()}-matches`;
 
             return (
               <section
                 key={bracket}
+                aria-labelledby={`${sectionId}-title`}
                 className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] shadow-sm"
+                style={{
+                  boxShadow: `0 0 0 1.5px ${BRACKET_ACCENTS[bracket].border}`,
+                  backgroundImage: `linear-gradient(135deg, ${BRACKET_ACCENTS[bracket].background}, transparent 70%)`,
+                }}
               >
                 <header className="flex flex-col gap-2 border-b border-[color:var(--border)] px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-[color:var(--foreground)]">{BRACKET_TITLES[bracket]}</h2>
+                  <div className="space-y-1">
+                    <h2
+                      id={`${sectionId}-title`}
+                      className="text-lg font-semibold text-[color:var(--foreground)]"
+                    >
+                      {BRACKET_TITLES[bracket]}
+                    </h2>
                     <p className="text-sm text-[color:var(--muted)]">
                       {bracket === "DOUBLES"
                         ? "Teams pair up from the singles bracket for a final showdown."
                         : "Singles bracket seeded from the Players roster."}
                     </p>
                   </div>
-                  <span className="text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
-                    {hasMatches ? "Live rounds" : "No matches"}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
+                      {hasMatches ? `${totalMatches} match${totalMatches === 1 ? "" : "es"}` : "No matches"}
+                    </span>
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--background)]/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-[color:var(--muted)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
+                      aria-expanded={isExpanded}
+                      aria-controls={sectionId}
+                      onClick={() =>
+                        setExpandedBrackets((prev) => ({
+                          ...prev,
+                          [bracket]: !prev[bracket],
+                        }))
+                      }
+                    >
+                      {isExpanded ? "Collapse" : "Expand"}
+                    </button>
+                  </div>
                 </header>
 
-                {hasMatches ? (
-                  <div className="grid gap-6 px-6 py-6 sm:px-8">
-                    {STAGE_ORDER.filter((stage) => rounds[stage].length > 0).map((stage) => (
-                      <div key={stage} className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-semibold uppercase tracking-[0.25em] text-[color:var(--muted)]">
-                            {STAGE_LABEL[stage]}
-                          </h3>
-                          <span className="text-xs text-[color:var(--muted)]">
-                            {rounds[stage].length} match{rounds[stage].length === 1 ? "" : "es"}
-                          </span>
-                        </div>
-                        <div className="grid gap-4">
-                          {rounds[stage].map((match) => {
-                            const isEditing = editingId === match.id;
-                            return (
-                              <article
-                                key={match.id}
-                                className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--background)]/80 p-5 shadow-inner backdrop-blur transition hover:border-[color:var(--accent)]"
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                  <div className="space-y-1">
-                                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
-                                      {STAGE_LABEL[match.stage]} · {BRACKET_TITLES[match.bracket]}
-                                    </p>
-                                    <p className="font-mono text-xs text-[color:var(--muted)]">
-                                      {match.id.slice(0, 8)}
-                                    </p>
-                                  </div>
-                                  {match.winner && (
-                                    <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--highlight)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--accent)]">
-                                      Winner · {match.winner}
-                                    </span>
-                                  )}
-                                </div>
-
-                                <div className="mt-4 space-y-3">
-                                  {["A", "B"].map((side) => {
-                                    const label = side === "A" ? playerLabel(match.team_a) : playerLabel(match.team_b);
-                                    const isWinner = match.winner === side;
-                                    return (
-                                      <div
-                                        key={side}
-                                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--highlight)] px-3 py-3 text-sm"
-                                      >
-                                        <div className="flex items-center gap-3 text-left">
-                                          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--accent)] text-xs font-semibold text-[color:var(--accent-contrast)]">
-                                            {side}
-                                          </span>
-                                          <span className="text-pretty font-medium text-[color:var(--foreground)]">
-                                            {label}
-                                          </span>
-                                        </div>
-                                        {isWinner && (
-                                          <span className="text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--accent)]">
-                                            Winner
-                                          </span>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-
-                                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                  <button
-                                    type="button"
-                                    onClick={() => openEdit(match)}
-                                    className="inline-flex items-center justify-center rounded-xl border border-[color:var(--accent)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-[color:var(--accent-contrast)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                                  >
-                                    {isEditing ? "Editing" : "Set winner"}
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => onClear(match.id)}
-                                    className="inline-flex items-center justify-center rounded-xl border border-red-500 px-4 py-2 text-sm font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                                  >
-                                    Clear result
-                                  </button>
-                                </div>
-
-                                {isEditing && (
-                                  <fieldset className="mt-4 grid gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--highlight)] p-4 text-sm">
-                                    <legend className="text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
-                                      Choose side
-                                    </legend>
-                                    <label className="flex items-center justify-between gap-3">
-                                      <span className="font-medium text-[color:var(--foreground)]">Team A</span>
-                                      <input
-                                        type="radio"
-                                        name={`winner-${match.id}`}
-                                        value="A"
-                                        checked={winner === "A"}
-                                        onChange={() => setWinner("A")}
-                                      />
-                                    </label>
-                                    <label className="flex items-center justify-between gap-3">
-                                      <span className="font-medium text-[color:var(--foreground)]">Team B</span>
-                                      <input
-                                        type="radio"
-                                        name={`winner-${match.id}`}
-                                        value="B"
-                                        checked={winner === "B"}
-                                        onChange={() => setWinner("B")}
-                                      />
-                                    </label>
-                                    <div className="flex flex-wrap items-center gap-3 pt-2">
-                                      <button
-                                        type="button"
-                                        onClick={onSave}
-                                        className="inline-flex items-center justify-center rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-semibold text-[color:var(--accent-contrast)] shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                                      >
-                                        Save winner
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditingId(null);
-                                          setWinner("");
-                                        }}
-                                        className="inline-flex items-center justify-center rounded-xl border border-[color:var(--border)] px-4 py-2 text-sm font-semibold text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                                      >
-                                        Cancel
-                                      </button>
+                {isExpanded ? (
+                  hasMatches ? (
+                    <div
+                      id={sectionId}
+                      className="grid gap-6 px-6 py-6 sm:px-8"
+                      style={{
+                        background: `linear-gradient(180deg, ${BRACKET_ACCENTS[bracket].highlight}, transparent)`,
+                      }}
+                    >
+                      {STAGE_ORDER.filter((stage) => rounds[stage].length > 0).map((stage) => (
+                        <div key={stage} className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold uppercase tracking-[0.25em] text-[color:var(--muted)]">
+                              {STAGE_LABEL[stage]}
+                            </h3>
+                            <span className="text-xs text-[color:var(--muted)]">
+                              {rounds[stage].length} match{rounds[stage].length === 1 ? "" : "es"}
+                            </span>
+                          </div>
+                          <div className="grid gap-4">
+                            {rounds[stage].map((match) => {
+                              const isEditing = editingId === match.id;
+                              return (
+                                <article
+                                  key={match.id}
+                                  className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--background)]/80 p-5 shadow-inner backdrop-blur transition hover:border-[color:var(--accent)]"
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div className="space-y-1">
+                                      <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
+                                        {STAGE_LABEL[match.stage]} · {BRACKET_TITLES[match.bracket]}
+                                      </p>
+                                      <p className="font-mono text-xs text-[color:var(--muted)]">
+                                        {match.id.slice(0, 8)}
+                                      </p>
                                     </div>
-                                  </fieldset>
-                                )}
-                              </article>
-                            );
-                          })}
+                                    {match.winner && (
+                                      <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--highlight)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--accent)]">
+                                        Winner · {match.winner}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="mt-4 space-y-3">
+                                    {["A", "B"].map((side) => {
+                                      const label = side === "A" ? playerLabel(match.team_a) : playerLabel(match.team_b);
+                                      const isWinner = match.winner === side;
+                                      return (
+                                        <div
+                                          key={side}
+                                          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--highlight)] px-3 py-3 text-sm"
+                                        >
+                                          <div className="flex items-center gap-3 text-left">
+                                            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--accent)] text-xs font-semibold text-[color:var(--accent-contrast)]">
+                                              {side}
+                                            </span>
+                                            <span className="text-pretty font-medium text-[color:var(--foreground)]">
+                                              {label}
+                                            </span>
+                                          </div>
+                                          {isWinner && (
+                                            <span className="text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--accent)]">
+                                              Winner
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+
+                                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <button
+                                      type="button"
+                                      onClick={() => openEdit(match)}
+                                      className="inline-flex items-center justify-center rounded-xl border border-[color:var(--accent)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-[color:var(--accent-contrast)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
+                                    >
+                                      {isEditing ? "Editing" : "Set winner"}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => onClear(match.id)}
+                                      className="inline-flex items-center justify-center rounded-xl border border-red-500 px-4 py-2 text-sm font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
+                                    >
+                                      Clear result
+                                    </button>
+                                  </div>
+
+                                  {isEditing && (
+                                    <fieldset className="mt-4 grid gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--highlight)] p-4 text-sm">
+                                      <legend className="text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
+                                        Choose side
+                                      </legend>
+                                      <label className="flex items-center justify-between gap-3">
+                                        <span className="font-medium text-[color:var(--foreground)]">Team A</span>
+                                        <input
+                                          type="radio"
+                                          name={`winner-${match.id}`}
+                                          value="A"
+                                          checked={winner === "A"}
+                                          onChange={() => setWinner("A")}
+                                        />
+                                      </label>
+                                      <label className="flex items-center justify-between gap-3">
+                                        <span className="font-medium text-[color:var(--foreground)]">Team B</span>
+                                        <input
+                                          type="radio"
+                                          name={`winner-${match.id}`}
+                                          value="B"
+                                          checked={winner === "B"}
+                                          onChange={() => setWinner("B")}
+                                        />
+                                      </label>
+                                      <div className="flex flex-wrap items-center gap-3 pt-2">
+                                        <button
+                                          type="button"
+                                          onClick={onSave}
+                                          className="inline-flex items-center justify-center rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-semibold text-[color:var(--accent-contrast)] shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
+                                        >
+                                          Save winner
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setEditingId(null);
+                                            setWinner("");
+                                          }}
+                                          className="inline-flex items-center justify-center rounded-xl border border-[color:var(--border)] px-4 py-2 text-sm font-semibold text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </fieldset>
+                                  )}
+                                </article>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p id={sectionId} className="px-6 py-10 text-center text-sm text-[color:var(--muted)] sm:px-8">
+                      No matches yet. Build brackets from the TD Control page.
+                    </p>
+                  )
                 ) : (
-                  <p className="px-6 py-10 text-center text-sm text-[color:var(--muted)] sm:px-8">
-                    No matches yet. Build brackets from the TD Control page.
-                  </p>
+                  <div
+                    id={sectionId}
+                    className="px-6 py-8 text-center text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)] sm:px-8"
+                  >
+                    {hasMatches
+                      ? `${totalMatches} match${totalMatches === 1 ? "" : "es"} collapsed`
+                      : "No matches yet"}
+                  </div>
                 )}
               </section>
             );
