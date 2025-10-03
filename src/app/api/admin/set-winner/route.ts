@@ -70,8 +70,9 @@ export async function POST(req: Request) {
     await placeTeam(m.feeds_loser_to,  loserTeam);
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    if (e instanceof Response) return e; // 403 from requireAdminPin
-    return NextResponse.json({ error: e?.message ?? 'Server error' }, { status: 500 });
+  } catch (error: unknown) {
+    if (error instanceof Response) return error; // 403 from requireAdminPin
+    const message = error instanceof Error ? error.message : 'Server error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

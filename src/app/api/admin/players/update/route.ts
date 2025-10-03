@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     if (!ev?.id) return NextResponse.json({ error: 'No event found' }, { status: 400 });
     const eventId = ev.id as string;
 
-    const patch: any = {};
+    const patch: { name?: string; seed?: number } = {};
     if (typeof name === 'string' && name.trim()) patch.name = name.trim();
     if (seed != null) {
       if (!Number.isInteger(seed) || seed < 1 || seed > 16)
@@ -33,8 +33,9 @@ export async function POST(req: Request) {
     if (updErr) return NextResponse.json({ error: updErr.message }, { status: 400 });
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    if (e instanceof Response) return e;
-    return NextResponse.json({ error: e?.message ?? 'Server error' }, { status: 500 });
+  } catch (error: unknown) {
+    if (error instanceof Response) return error;
+    const message = error instanceof Error ? error.message : 'Server error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

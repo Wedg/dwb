@@ -166,8 +166,9 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ ok: true, message: 'R1 ensured (or created), QF/SF/F ensured, R1 wired.' });
-  } catch (e: any) {
-    if (e instanceof Response) return e; // 403 from requireAdminPin
-    return NextResponse.json({ error: e?.message ?? 'Server error' }, { status: 500 });
+  } catch (error: unknown) {
+    if (error instanceof Response) return error; // 403 from requireAdminPin
+    const message = error instanceof Error ? error.message : 'Server error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
