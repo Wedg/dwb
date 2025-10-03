@@ -340,26 +340,20 @@ export default function MatchesPage() {
                                     <legend className="text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
                                       Choose side
                                     </legend>
-                                    <label className="flex items-center justify-between gap-3">
-                                      <span className="font-medium text-[color:var(--foreground)]">Team A</span>
-                                      <input
-                                        type="radio"
-                                        name={`winner-${match.id}`}
-                                        value="A"
-                                        checked={winner === "A"}
-                                        onChange={() => setWinner("A")}
-                                      />
-                                    </label>
-                                    <label className="flex items-center justify-between gap-3">
-                                      <span className="font-medium text-[color:var(--foreground)]">Team B</span>
-                                      <input
-                                        type="radio"
-                                        name={`winner-${match.id}`}
-                                        value="B"
-                                        checked={winner === "B"}
-                                        onChange={() => setWinner("B")}
-                                      />
-                                    </label>
+                                    {(["A", "B"] as const).map((side) => (
+                                      <label key={side} className="flex items-center justify-between gap-3">
+                                        <span className="font-medium text-[color:var(--foreground)]">
+                                          {match.is_doubles ? `Team ${side}` : side}
+                                        </span>
+                                        <input
+                                          type="radio"
+                                          name={`winner-${match.id}`}
+                                          value={side}
+                                          checked={winner === side}
+                                          onChange={() => setWinner(side)}
+                                        />
+                                      </label>
+                                    ))}
                                     <div className="flex flex-wrap items-center gap-3 pt-2">
                                       <button
                                         type="button"
