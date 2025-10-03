@@ -2,10 +2,20 @@
 
 import Link from "next/link";
 import { QRCodeCanvas } from "qrcode.react";
+import { useEffect, useState } from "react";
 
 export default function HomePage() {
-  // Adjust this to your deployed URL on Vercel (or custom domain)
-  const publicBracketsUrl = "https://dwb-theta.vercel.app/brackets";
+  const [siteUrl, setSiteUrl] = useState("https://dwb-theta.vercel.app"); // fallback
+
+  useEffect(() => {
+    // Prefer the live origin when client-side
+    const envUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    if (typeof window !== "undefined") {
+      setSiteUrl(envUrl || window.location.origin);
+    } else if (envUrl) {
+      setSiteUrl(envUrl);
+    }
+  }, []);
 
   return (
     <main className="flex flex-col items-center gap-6 p-8 font-sans">
@@ -18,45 +28,31 @@ export default function HomePage() {
       </p>
 
       <div className="grid gap-4 sm:grid-cols-2 mt-6">
-        <Link
-          href="/brackets"
-          className="rounded-lg border border-gray-300 p-6 hover:bg-gray-50 text-center"
-        >
+        <Link href="/brackets" className="rounded-lg border border-gray-300 p-6 hover:bg-gray-50 text-center">
           <h2 className="text-xl font-semibold">Brackets (public)</h2>
           <p className="text-gray-500">View live brackets for Main, Lower, and Doubles.</p>
         </Link>
 
-        <Link
-          href="/matches"
-          className="rounded-lg border border-gray-300 p-6 hover:bg-gray-50 text-center"
-        >
+        <Link href="/matches" className="rounded-lg border border-gray-300 p-6 hover:bg-gray-50 text-center">
           <h2 className="text-xl font-semibold">Matches (public)</h2>
           <p className="text-gray-500">Browse all matches and results.</p>
         </Link>
 
-        <Link
-          href="/players"
-          className="rounded-lg border border-gray-300 p-6 hover:bg-gray-50 text-center"
-        >
+        <Link href="/players" className="rounded-lg border border-gray-300 p-6 hover:bg-gray-50 text-center">
           <h2 className="text-xl font-semibold">Players (admin)</h2>
           <p className="text-gray-500">Manage player list and seeding (PIN required).</p>
         </Link>
 
-        <Link
-          href="/control"
-          className="rounded-lg border border-gray-300 p-6 hover:bg-gray-50 text-center"
-        >
+        <Link href="/control" className="rounded-lg border border-gray-300 p-6 hover:bg-gray-50 text-center">
           <h2 className="text-xl font-semibold">TD Control (admin)</h2>
-          <p className="text-gray-500">Bracket setup, score entry, resets (PIN required).</p>
+          <p className="text-gray-500">Bracket setup, results, and resets (PIN required).</p>
         </Link>
       </div>
 
       <div className="mt-10 flex flex-col items-center gap-3">
-        <p className="text-gray-600">
-          Share this QR code with players to follow the live brackets:
-        </p>
-        <QRCodeCanvas value={publicBracketsUrl} size={160} />
-        <p className="text-sm text-gray-500">{publicBracketsUrl}</p>
+        <p className="text-gray-600">Share this QR code to open the tournament hub:</p>
+        <QRCodeCanvas value={siteUrl} size={160} />
+        <p className="text-sm text-gray-500">{siteUrl}</p>
       </div>
     </main>
   );

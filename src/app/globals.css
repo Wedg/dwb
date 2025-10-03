@@ -1,13 +1,25 @@
 @import "tailwindcss";
 
+/* --- Theme Variables --- */
 :root {
+  /* Core background/foreground */
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Extra tokens for cards, borders, accents */
+  --card: #ffffff;
+  --border: #e5e7eb; /* gray-200 */
+  --muted: #666666;
+  --highlight: #f9fafb; /* subtle alt background */
+
+  --accent: #111111;          /* dark text / primary */
+  --accent-contrast: #ffffff; /* text on accent */
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -16,11 +28,57 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+
+    --card: #111214;
+    --border: #23262a;
+    --muted: #9ca3af;
+    --highlight: #131417;
+
+    --accent: #f3f4f6;
+    --accent-contrast: #111111;
   }
 }
 
-body {
+/* --- Base styles --- */
+html, body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Links inherit color by default */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Headings: give them stronger weight */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+}
+
+/* Optional: card + button helpers if you want to use plain CSS classes */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border: 1px solid var(--accent);
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
 }
