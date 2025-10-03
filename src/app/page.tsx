@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import QRCode from "qrcode.react";
+import { QRCodeCanvas } from "qrcode.react";
 
 export default function HomePage() {
   // Adjust this to your deployed URL on Vercel (or custom domain)
@@ -55,7 +55,7 @@ export default function HomePage() {
         <p className="text-gray-600">
           Share this QR code with players to follow the live brackets:
         </p>
-        <QRCode value={publicBracketsUrl} size={160} />
+        <QRCodeCanvas value={publicBracketsUrl} size={160} />
         <p className="text-sm text-gray-500">{publicBracketsUrl}</p>
       </div>
     </main>
