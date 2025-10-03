@@ -50,8 +50,9 @@ export async function POST(req: Request) {
 
     await supabaseAdmin.from('matches').update({ winner: null }).eq('id', m.id);
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    if (e instanceof Response) return e;
-    return NextResponse.json({ error: e?.message ?? 'Server error' }, { status: 500 });
+  } catch (error: unknown) {
+    if (error instanceof Response) return error;
+    const message = error instanceof Error ? error.message : 'Server error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

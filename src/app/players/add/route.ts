@@ -30,8 +30,9 @@ export async function POST(req: Request) {
     if (insErr) return NextResponse.json({ error: insErr.message }, { status: 400 });
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    if (e instanceof Response) return e;
-    return NextResponse.json({ error: e?.message ?? 'Server error' }, { status: 500 });
+  } catch (error: unknown) {
+    if (error instanceof Response) return error;
+    const message = error instanceof Error ? error.message : 'Server error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -12,6 +12,9 @@
   --muted: #666666;
   --highlight: #f9fafb; /* subtle alt background */
 
+  /* Accent glow for backgrounds */
+  --surface-glow: rgba(79, 70, 229, 0.08);
+
   --accent: #111111;          /* dark text / primary */
   --accent-contrast: #ffffff; /* text on accent */
 }
@@ -34,6 +37,8 @@
     --muted: #9ca3af;
     --highlight: #131417;
 
+    --surface-glow: rgba(99, 102, 241, 0.24);
+
     --accent: #f3f4f6;
     --accent-contrast: #111111;
   }
@@ -46,6 +51,7 @@ html, body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  min-height: 100%;
 }
 
 /* Links inherit color by default */
