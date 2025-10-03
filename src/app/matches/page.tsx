@@ -29,6 +29,30 @@ const BRACKET_TITLES: Record<Bracket, string> = {
   DOUBLES: "Anthony Prangley Silence of the Champs",
 };
 
+const BRACKET_THEMES: Record<
+  Bracket,
+  { border: string; glow: string; header: string; label: string }
+> = {
+  MAIN: {
+    border: "rgba(129, 140, 248, 0.45)",
+    glow: "rgba(99, 102, 241, 0.25)",
+    header: "linear-gradient(90deg, rgba(129, 140, 248, 0.18), transparent)",
+    label: "text-violet-500",
+  },
+  LOWER: {
+    border: "rgba(45, 212, 191, 0.45)",
+    glow: "rgba(20, 184, 166, 0.22)",
+    header: "linear-gradient(90deg, rgba(45, 212, 191, 0.18), transparent)",
+    label: "text-teal-500",
+  },
+  DOUBLES: {
+    border: "rgba(251, 191, 36, 0.55)",
+    glow: "rgba(251, 146, 60, 0.26)",
+    header: "linear-gradient(90deg, rgba(251, 191, 36, 0.2), transparent)",
+    label: "text-amber-500",
+  },
+};
+
 const STAGE_LABEL: Record<Stage, string> = {
   R1: "Round 1",
   QF: "Quarterfinals",
@@ -62,6 +86,11 @@ export default function MatchesPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [winner, setWinner] = useState<"A" | "B" | "">("");
+  const [collapsed, setCollapsed] = useState<Record<Bracket, boolean>>({
+    MAIN: false,
+    LOWER: false,
+    DOUBLES: false,
+  });
 
   const nameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -234,27 +263,60 @@ export default function MatchesPage() {
           {BRACKET_ORDER.map((bracket) => {
             const rounds = grouped[bracket];
             const hasMatches = STAGE_ORDER.some((stage) => rounds[stage].length > 0);
+            const theme = BRACKET_THEMES[bracket];
+            const isCollapsed = collapsed[bracket];
 
             return (
               <section
                 key={bracket}
-                className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] shadow-sm"
+                style={{
+                  borderColor: theme.border,
+                  boxShadow:
+                    "0 1px 2px rgba(15, 23, 42, 0.04), 0 18px 38px -24px " + theme.glow,
+                }}
+                className="group rounded-3xl border bg-[color:var(--card)] transition"
               >
-                <header className="flex flex-col gap-2 border-b border-[color:var(--border)] px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
+                <header
+                  style={{ background: theme.header }}
+                  className="flex flex-col gap-3 rounded-t-3xl border-b border-[color:var(--border)] px-6 py-6 sm:flex-row sm:items-center sm:justify-between"
+                >
                   <div>
-                    <h2 className="text-lg font-semibold text-[color:var(--foreground)]">{BRACKET_TITLES[bracket]}</h2>
+                    <h2 className="text-lg font-semibold text-[color:var(--foreground)]">
+                      {BRACKET_TITLES[bracket]}
+                    </h2>
                     <p className="text-sm text-[color:var(--muted)]">
                       {bracket === "DOUBLES"
                         ? "Teams pair up from the singles bracket for a final showdown."
                         : "Singles bracket seeded from the Players roster."}
                     </p>
                   </div>
-                  <span className="text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
-                    {hasMatches ? "Live rounds" : "No matches"}
-                  </span>
+                  <div className="flex flex-col gap-3 sm:items-end">
+                    <span
+                      className={`text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)] ${theme.label}`}
+                    >
+                      {hasMatches ? "Live rounds" : "No matches"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCollapsed((prev) => ({
+                          ...prev,
+                          [bracket]: !prev[bracket],
+                        }))
+                      }
+                      aria-expanded={!isCollapsed}
+                      className="inline-flex items-center justify-center self-start rounded-full border border-transparent bg-[color:var(--background)]/60 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)] transition hover:bg-[color:var(--background)]/80 hover:text-[color:var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
+                    >
+                      {isCollapsed ? "Expand" : "Collapse"}
+                    </button>
+                  </div>
                 </header>
 
-                {hasMatches ? (
+                {isCollapsed ? (
+                  <p className="px-6 py-8 text-sm text-[color:var(--muted)]">
+                    Bracket hidden. Expand to review matches.
+                  </p>
+                ) : hasMatches ? (
                   <div className="grid gap-6 px-6 py-6 sm:px-8">
                     {STAGE_ORDER.filter((stage) => rounds[stage].length > 0).map((stage) => (
                       <div key={stage} className="space-y-4">
