@@ -5,7 +5,7 @@ import QRCode from "qrcode.react";
 
 export default function HomePage() {
   // Adjust this to your deployed URL on Vercel (or custom domain)
-  const publicBracketsUrl = "https://dwb.vercel.app/brackets";
+  const publicBracketsUrl = "https://dwb-theta.vercel.app/brackets";
 
   return (
     <main className="flex flex-col items-center gap-6 p-8 font-sans">
