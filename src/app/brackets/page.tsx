@@ -206,26 +206,25 @@ export default function BracketsPage() {
                             )}
                           </div>
                           <div className="mt-3 space-y-2">
-                            <div className={`rounded-xl border px-3 py-3 text-sm font-medium ${
-                              match.winner === "A"
-                                ? "border-[color:var(--accent)] text-[color:var(--foreground)]"
-                                : "border-[color:var(--border)] text-[color:var(--foreground)]"
-                            }`}>
-                              <span className="block text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
-                                Team A
-                              </span>
-                              <span className="text-pretty">{labelTeam(match.team_a)}</span>
-                            </div>
-                            <div className={`rounded-xl border px-3 py-3 text-sm font-medium ${
-                              match.winner === "B"
-                                ? "border-[color:var(--accent)] text-[color:var(--foreground)]"
-                                : "border-[color:var(--border)] text-[color:var(--foreground)]"
-                            }`}>
-                              <span className="block text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
-                                Team B
-                              </span>
-                              <span className="text-pretty">{labelTeam(match.team_b)}</span>
-                            </div>
+                            {(["A", "B"] as const).map((side) => {
+                              const isWinner = match.winner === side;
+                              const teamIds = side === "A" ? match.team_a : match.team_b;
+                              return (
+                                <div
+                                  key={side}
+                                  className={`rounded-xl border px-3 py-3 text-sm font-medium ${
+                                    isWinner
+                                      ? "border-[color:var(--accent)] text-[color:var(--foreground)]"
+                                      : "border-[color:var(--border)] text-[color:var(--foreground)]"
+                                  }`}
+                                >
+                                  <span className="block text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
+                                    {tab === "DOUBLES" ? `Team ${side}` : side}
+                                  </span>
+                                  <span className="text-pretty">{labelTeam(teamIds)}</span>
+                                </div>
+                              );
+                            })}
                           </div>
                         </article>
                       ))}
