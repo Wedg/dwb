@@ -242,7 +242,7 @@ export default function BracketsPage() {
       )}
 
       <p className="text-center text-sm text-[color:var(--muted)]">
-        Tip: use the <Link href="/matches" className="underline">Matches</Link> page to set winners; updates appear instantly here.
+        Use the <Link href="/matches" className="underline">Matches</Link> page to set winners; updates appear instantly here.
       </p>
     </main>
   );
