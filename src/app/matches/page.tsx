@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from "react";
-import { adminFetch, ensurePin } from "@/lib/adminClient";
-import { supabase } from "@/lib/supabaseClient";
+import { useEffect, useMemo, useState } from 'react';
+import { adminFetch, ensurePin } from '@/lib/adminClient';
+import { supabase } from '@/lib/supabaseClient';
 
-type Bracket = "MAIN" | "LOWER" | "DOUBLES";
-type Stage = "R1" | "QF" | "SF" | "F";
+type Bracket = 'MAIN' | 'LOWER' | 'DOUBLES';
+type Stage = 'R1' | 'QF' | 'SF' | 'F';
 
 type MatchRow = {
   id: string;
@@ -15,7 +15,7 @@ type MatchRow = {
   round_num: number;
   team_a: string[];
   team_b: string[];
-  winner: "A" | "B" | null;
+  winner: 'A' | 'B' | null;
   feeds_winner_to: string | null;
   feeds_loser_to: string | null;
   is_doubles: boolean;
@@ -24,51 +24,47 @@ type MatchRow = {
 type Player = { id: string; name: string; seed: number | null };
 
 const BRACKET_TITLES: Record<Bracket, string> = {
-  MAIN: "DwB Spring Champs",
-  LOWER: "Pudel König",
-  DOUBLES: "Anthony Prangley Silence of the Champs",
+  MAIN: 'DwB Spring Champs',
+  LOWER: 'Pudel König',
+  DOUBLES: 'Anthony Prangley Silence of the Champs',
 };
 
-const BRACKET_ACCENTS: Record<
-  Bracket,
-  { border: string; background: string; highlight: string }
-> = {
+const BRACKET_ACCENTS: Record<Bracket, { border: string; background: string; highlight: string }> = {
   MAIN: {
-    border: "rgba(59, 130, 246, 0.35)",
-    background: "rgba(59, 130, 246, 0.08)",
-    highlight: "rgba(59, 130, 246, 0.18)",
+    border: 'rgba(59, 130, 246, 0.28)',
+    background: 'rgba(59, 130, 246, 0.08)',
+    highlight: 'rgba(59, 130, 246, 0.16)',
   },
   LOWER: {
-    border: "rgba(249, 115, 22, 0.35)",
-    background: "rgba(249, 115, 22, 0.08)",
-    highlight: "rgba(249, 115, 22, 0.18)",
+    border: 'rgba(249, 115, 22, 0.28)',
+    background: 'rgba(249, 115, 22, 0.08)',
+    highlight: 'rgba(249, 115, 22, 0.16)',
   },
   DOUBLES: {
-    border: "rgba(147, 51, 234, 0.35)",
-    background: "rgba(147, 51, 234, 0.08)",
-    highlight: "rgba(147, 51, 234, 0.18)",
+    border: 'rgba(147, 51, 234, 0.28)',
+    background: 'rgba(147, 51, 234, 0.08)',
+    highlight: 'rgba(147, 51, 234, 0.16)',
   },
 };
 
+const BRACKET_ORDER: Bracket[] = ['MAIN', 'LOWER', 'DOUBLES'];
+const STAGE_ORDER: Stage[] = ['R1', 'QF', 'SF', 'F'];
 const STAGE_LABEL: Record<Stage, string> = {
-  R1: "Round 1",
-  QF: "Quarterfinals",
-  SF: "Semifinals",
-  F: "Final",
+  R1: 'Round 1',
+  QF: 'Quarterfinals',
+  SF: 'Semifinals',
+  F: 'Final',
 };
-
-const STAGE_ORDER: Stage[] = ["R1", "QF", "SF", "F"];
-const BRACKET_ORDER: Bracket[] = ["MAIN", "LOWER", "DOUBLES"];
 
 async function getLatestEventId(): Promise<string | null> {
   const { data, error } = await supabase
-    .from("events")
-    .select("id")
-    .order("created_at", { ascending: false })
+    .from('events')
+    .select('id')
+    .order('created_at', { ascending: false })
     .limit(1)
     .single();
   if (error) {
-    console.error("events load error:", error);
+    console.error('events load error:', error);
     return null;
   }
   return data?.id ?? null;
@@ -82,16 +78,15 @@ export default function MatchesPage() {
   const [err, setErr] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [winner, setWinner] = useState<"A" | "B" | "">("");
-  const [expandedBrackets, setExpandedBrackets] = useState<Record<Bracket, boolean>>(
-    () =>
-      BRACKET_ORDER.reduce(
-        (acc, bracket) => ({
-          ...acc,
-          [bracket]: true,
-        }),
-        {} as Record<Bracket, boolean>
-      )
+  const [winner, setWinner] = useState<'A' | 'B' | ''>('');
+  const [expandedBrackets, setExpandedBrackets] = useState<Record<Bracket, boolean>>(() =>
+    BRACKET_ORDER.reduce(
+      (acc, bracket) => ({
+        ...acc,
+        [bracket]: true,
+      }),
+      {} as Record<Bracket, boolean>,
+    ),
   );
 
   const nameById = useMemo(() => {
@@ -103,12 +98,12 @@ export default function MatchesPage() {
   async function refreshMatches(currentEventId: string | null) {
     if (!currentEventId) return;
     const { data, error } = await supabase
-      .from("matches")
+      .from('matches')
       .select(
-        "id,event_id,bracket,stage,round_num,team_a,team_b,winner,feeds_winner_to,feeds_loser_to,is_doubles"
+        'id,event_id,bracket,stage,round_num,team_a,team_b,winner,feeds_winner_to,feeds_loser_to,is_doubles',
       )
-      .eq("event_id", currentEventId)
-      .order("round_num", { ascending: true });
+      .eq('event_id', currentEventId)
+      .order('round_num', { ascending: true });
     if (error) {
       throw error;
     }
@@ -121,32 +116,32 @@ export default function MatchesPage() {
       setErr(null);
       const latestEventId = await getLatestEventId();
       if (!latestEventId) {
-        setErr("No event found. Create one in Supabase (table: events).");
+        setErr('No event found. Create one in Supabase (table: events).');
         setLoading(false);
         return;
       }
       setEventId(latestEventId);
 
       const [playersResponse, matchesResponse] = await Promise.all([
-        supabase.from("players").select("id,name,seed").eq("event_id", latestEventId),
+        supabase.from('players').select('id,name,seed').eq('event_id', latestEventId),
         supabase
-          .from("matches")
+          .from('matches')
           .select(
-            "id,event_id,bracket,stage,round_num,team_a,team_b,winner,feeds_winner_to,feeds_loser_to,is_doubles"
+            'id,event_id,bracket,stage,round_num,team_a,team_b,winner,feeds_winner_to,feeds_loser_to,is_doubles',
           )
-          .eq("event_id", latestEventId)
-          .order("round_num", { ascending: true }),
+          .eq('event_id', latestEventId)
+          .order('round_num', { ascending: true }),
       ]);
 
       if (playersResponse.error) {
         console.error(playersResponse.error);
-        setErr(playersResponse.error.message ?? "Failed to load players");
+        setErr(playersResponse.error.message ?? 'Failed to load players');
         setLoading(false);
         return;
       }
       if (matchesResponse.error) {
         console.error(matchesResponse.error);
-        setErr(matchesResponse.error.message ?? "Failed to load matches");
+        setErr(matchesResponse.error.message ?? 'Failed to load matches');
         setLoading(false);
         return;
       }
@@ -158,9 +153,9 @@ export default function MatchesPage() {
   }, []);
 
   function playerLabel(ids: string[]) {
-    if (!ids || ids.length === 0) return "(TBD)";
+    if (!ids || ids.length === 0) return '(TBD)';
     if (ids.length === 1) return nameById.get(ids[0]) ?? ids[0];
-    return ids.map((id) => nameById.get(id) ?? id).join(" + ");
+    return ids.map((id) => nameById.get(id) ?? id).join(' + ');
   }
 
   const grouped = useMemo(() => {
@@ -172,10 +167,10 @@ export default function MatchesPage() {
             ...stageMap,
             [stage]: [] as MatchRow[],
           }),
-          {} as Record<Stage, MatchRow[]>
+          {} as Record<Stage, MatchRow[]>,
         ),
       }),
-      {} as Record<Bracket, Record<Stage, MatchRow[]>>
+      {} as Record<Bracket, Record<Stage, MatchRow[]>>,
     );
 
     matches.forEach((match) => {
@@ -197,23 +192,23 @@ export default function MatchesPage() {
 
   function openEdit(match: MatchRow) {
     setEditingId(match.id);
-    setWinner((match.winner ?? "") as "A" | "B" | "");
+    setWinner((match.winner ?? '') as 'A' | 'B' | '');
   }
 
   async function onSave() {
     if (!editingId) return;
-    if (winner !== "A" && winner !== "B") {
-      alert("Pick A or B");
+    if (winner !== 'A' && winner !== 'B') {
+      alert('Pick A or B');
       return;
     }
     if (!ensurePin()) return;
     try {
-      await adminFetch("/api/admin/set-winner", { matchId: editingId, winner });
+      await adminFetch('/api/admin/set-winner', { matchId: editingId, winner });
       await refreshMatches(eventId);
       setEditingId(null);
-      setWinner("");
+      setWinner('');
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed";
+      const message = error instanceof Error ? error.message : 'Failed';
       alert(message);
     }
   }
@@ -221,12 +216,12 @@ export default function MatchesPage() {
   async function onClear(matchId: string) {
     if (!ensurePin()) return;
     try {
-      await adminFetch("/api/admin/clear-result", { matchId });
+      await adminFetch('/api/admin/clear-result', { matchId });
       await refreshMatches(eventId);
       setEditingId(null);
-      setWinner("");
+      setWinner('');
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to clear";
+      const message = error instanceof Error ? error.message : 'Failed to clear';
       alert(message);
     }
   }
@@ -265,10 +260,7 @@ export default function MatchesPage() {
           {BRACKET_ORDER.map((bracket) => {
             const rounds = grouped[bracket];
             const hasMatches = STAGE_ORDER.some((stage) => rounds[stage].length > 0);
-            const totalMatches = STAGE_ORDER.reduce(
-              (count, stage) => count + rounds[stage].length,
-              0
-            );
+            const totalMatches = STAGE_ORDER.reduce((count, stage) => count + rounds[stage].length, 0);
             const isExpanded = expandedBrackets[bracket];
             const sectionId = `${bracket.toLowerCase()}-matches`;
 
@@ -284,21 +276,18 @@ export default function MatchesPage() {
               >
                 <header className="flex flex-col gap-2 border-b border-[color:var(--border)] px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-1">
-                    <h2
-                      id={`${sectionId}-title`}
-                      className="text-lg font-semibold text-[color:var(--foreground)]"
-                    >
+                    <h2 id={`${sectionId}-title`} className="text-lg font-semibold text-[color:var(--foreground)]">
                       {BRACKET_TITLES[bracket]}
                     </h2>
                     <p className="text-sm text-[color:var(--muted)]">
-                      {bracket === "DOUBLES"
-                        ? "Teams pair up from the singles bracket for a final showdown."
-                        : "Singles bracket seeded from the Players roster."}
+                      {bracket === 'DOUBLES'
+                        ? 'Teams pair up from the singles bracket for a final showdown.'
+                        : 'Singles bracket seeded from the Players roster.'}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
-                      {hasMatches ? `${totalMatches} match${totalMatches === 1 ? "" : "es"}` : "No matches"}
+                      {hasMatches ? `${totalMatches} match${totalMatches === 1 ? '' : 'es'}` : 'No matches'}
                     </span>
                     <button
                       type="button"
@@ -312,7 +301,7 @@ export default function MatchesPage() {
                         }))
                       }
                     >
-                      {isExpanded ? "Collapse" : "Expand"}
+                      {isExpanded ? 'Collapse' : 'Expand'}
                     </button>
                   </div>
                 </header>
@@ -333,7 +322,7 @@ export default function MatchesPage() {
                               {STAGE_LABEL[stage]}
                             </h3>
                             <span className="text-xs text-[color:var(--muted)]">
-                              {rounds[stage].length} match{rounds[stage].length === 1 ? "" : "es"}
+                              {rounds[stage].length} match{rounds[stage].length === 1 ? '' : 'es'}
                             </span>
                           </div>
                           <div className="grid gap-4">
@@ -349,9 +338,7 @@ export default function MatchesPage() {
                                       <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
                                         {STAGE_LABEL[match.stage]} · {BRACKET_TITLES[match.bracket]}
                                       </p>
-                                      <p className="font-mono text-xs text-[color:var(--muted)]">
-                                        {match.id.slice(0, 8)}
-                                      </p>
+                                      <p className="font-mono text-xs text-[color:var(--muted)]">{match.id.slice(0, 8)}</p>
                                     </div>
                                     {match.winner && (
                                       <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--highlight)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--accent)]">
@@ -361,8 +348,8 @@ export default function MatchesPage() {
                                   </div>
 
                                   <div className="mt-4 space-y-3">
-                                    {["A", "B"].map((side) => {
-                                      const label = side === "A" ? playerLabel(match.team_a) : playerLabel(match.team_b);
+                                    {(['A', 'B'] as const).map((side) => {
+                                      const label = side === 'A' ? playerLabel(match.team_a) : playerLabel(match.team_b);
                                       const isWinner = match.winner === side;
                                       return (
                                         <div
@@ -373,9 +360,7 @@ export default function MatchesPage() {
                                             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--accent)] text-xs font-semibold text-[color:var(--accent-contrast)]">
                                               {side}
                                             </span>
-                                            <span className="text-pretty font-medium text-[color:var(--foreground)]">
-                                              {label}
-                                            </span>
+                                            <span className="text-pretty font-medium text-[color:var(--foreground)]">{label}</span>
                                           </div>
                                           {isWinner && (
                                             <span className="text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--accent)]">
@@ -393,7 +378,7 @@ export default function MatchesPage() {
                                       onClick={() => openEdit(match)}
                                       className="inline-flex items-center justify-center rounded-xl border border-[color:var(--accent)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-[color:var(--accent-contrast)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
                                     >
-                                      {isEditing ? "Editing" : "Set winner"}
+                                      {isEditing ? 'Editing' : 'Set winner'}
                                     </button>
 
                                     <button
@@ -416,8 +401,8 @@ export default function MatchesPage() {
                                           type="radio"
                                           name={`winner-${match.id}`}
                                           value="A"
-                                          checked={winner === "A"}
-                                          onChange={() => setWinner("A")}
+                                          checked={winner === 'A'}
+                                          onChange={() => setWinner('A')}
                                         />
                                       </label>
                                       <label className="flex items-center justify-between gap-3">
@@ -426,8 +411,8 @@ export default function MatchesPage() {
                                           type="radio"
                                           name={`winner-${match.id}`}
                                           value="B"
-                                          checked={winner === "B"}
-                                          onChange={() => setWinner("B")}
+                                          checked={winner === 'B'}
+                                          onChange={() => setWinner('B')}
                                         />
                                       </label>
                                       <div className="flex flex-wrap items-center gap-3 pt-2">
@@ -442,7 +427,7 @@ export default function MatchesPage() {
                                           type="button"
                                           onClick={() => {
                                             setEditingId(null);
-                                            setWinner("");
+                                            setWinner('');
                                           }}
                                           className="inline-flex items-center justify-center rounded-xl border border-[color:var(--border)] px-4 py-2 text-sm font-semibold text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
                                         >
@@ -468,9 +453,7 @@ export default function MatchesPage() {
                     id={sectionId}
                     className="px-6 py-8 text-center text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)] sm:px-8"
                   >
-                    {hasMatches
-                      ? `${totalMatches} match${totalMatches === 1 ? "" : "es"} collapsed`
-                      : "No matches yet"}
+                    {hasMatches ? `${totalMatches} match${totalMatches === 1 ? '' : 'es'} collapsed` : 'No matches yet'}
                   </div>
                 )}
               </section>
