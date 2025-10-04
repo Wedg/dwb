@@ -26,6 +26,30 @@ const BRACKET_TITLES: Record<Bracket, string> = {
   DOUBLES: "Anthony Prangley Silence of the Champs",
 };
 
+const BRACKET_THEMES: Record<
+  Bracket,
+  { border: string; glow: string; header: string; label: string }
+> = {
+  MAIN: {
+    border: "rgba(129, 140, 248, 0.45)",
+    glow: "rgba(99, 102, 241, 0.25)",
+    header: "linear-gradient(90deg, rgba(129, 140, 248, 0.18), transparent)",
+    label: "text-violet-500",
+  },
+  LOWER: {
+    border: "rgba(45, 212, 191, 0.45)",
+    glow: "rgba(20, 184, 166, 0.22)",
+    header: "linear-gradient(90deg, rgba(45, 212, 191, 0.18), transparent)",
+    label: "text-teal-500",
+  },
+  DOUBLES: {
+    border: "rgba(251, 191, 36, 0.55)",
+    glow: "rgba(251, 146, 60, 0.26)",
+    header: "linear-gradient(90deg, rgba(251, 191, 36, 0.2), transparent)",
+    label: "text-amber-500",
+  },
+};
+
 const STAGE_ORDER: Stage[] = ["R1", "QF", "SF", "F"];
 const STAGE_LABEL: Record<Stage, string> = {
   R1: "Round 1",
@@ -121,6 +145,8 @@ export default function BracketsPage() {
     );
   }, [matches, tab]);
 
+  const theme = BRACKET_THEMES[tab];
+
   return (
     <main className="relative mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-5xl flex-col gap-10 px-4 py-10 sm:px-6 lg:px-8">
       <div
@@ -168,8 +194,18 @@ export default function BracketsPage() {
       )}
 
       {!loading && !err && (
-        <section className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-0 shadow-sm">
-          <header className="flex flex-col gap-2 border-b border-[color:var(--border)] px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
+        <section
+          style={{
+            borderColor: theme.border,
+            boxShadow:
+              "0 1px 2px rgba(15, 23, 42, 0.04), 0 18px 38px -24px " + theme.glow,
+          }}
+          className="rounded-3xl border bg-[color:var(--card)] p-0 shadow-sm"
+        >
+          <header
+            style={{ background: theme.header }}
+            className="flex flex-col gap-2 rounded-t-3xl border-b border-[color:var(--border)] px-6 py-6 sm:flex-row sm:items-center sm:justify-between"
+          >
             <div>
               <h2 className="text-lg font-semibold text-[color:var(--foreground)]">{BRACKET_TITLES[tab]}</h2>
               <p className="text-sm text-[color:var(--muted)]">
@@ -178,7 +214,9 @@ export default function BracketsPage() {
                   : "Seeded singles bracket straight from the Players roster."}
               </p>
             </div>
-            <span className="text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
+            <span
+              className={`text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)] ${theme.label}`}
+            >
               {rounds.length > 0 ? "Live view" : "Coming soon"}
             </span>
           </header>
