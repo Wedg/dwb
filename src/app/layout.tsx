@@ -33,26 +33,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 href="/"
                 className="rounded-full border border-transparent px-3 py-1 text-[color:var(--foreground)] transition hover:border-[color:var(--border)] hover:bg-[color:var(--highlight)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
               >
-                Dinner with the Bishop
+                DwB Home
               </Link>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <Link
-                  href="/"
+                  href="/control"
                   className="rounded-full px-3 py-1 text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] hover:text-[color:var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
                 >
-                  Home
-                </Link>
-                <Link
-                  href="/brackets"
-                  className="rounded-full px-3 py-1 text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] hover:text-[color:var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                >
-                  Brackets
-                </Link>
-                <Link
-                  href="/matches"
-                  className="rounded-full px-3 py-1 text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] hover:text-[color:var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                >
-                  Matches
+                  TD Control
                 </Link>
                 <Link
                   href="/players"
@@ -61,10 +49,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   Players
                 </Link>
                 <Link
-                  href="/control"
+                  href="/matches"
                   className="rounded-full px-3 py-1 text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] hover:text-[color:var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
                 >
-                  TD Control
+                  Matches
+                </Link>
+                <Link
+                  href="/brackets"
+                  className="rounded-full px-3 py-1 text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] hover:text-[color:var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
+                >
+                  Brackets
                 </Link>
               </div>
             </nav>
