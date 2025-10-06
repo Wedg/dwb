@@ -213,14 +213,17 @@ export default function PlayersPage() {
             const canMoveDown = !!(neighborDown && player.seed != null && neighborDown.seed != null);
 
             return (
-              <li key={player.id} className="flex flex-col gap-4 px-6 py-4 sm:flex-row sm:items-center sm:gap-6">
+              <li
+                key={player.id}
+                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-6 py-4 sm:gap-6"
+              >
                 <span className="inline-flex min-w-[3.5rem] items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--highlight)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-[color:var(--accent)]">
                   #{player.seed ?? "—"}
                 </span>
-                <div className="flex-1 text-base font-medium text-[color:var(--foreground)]">
+                <div className="min-w-0 text-base font-medium text-[color:var(--foreground)]">
                   {player.name}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 justify-self-end">
                   <button
                     type="button"
                     onClick={() => swapSeeds(player.id, -1)}
@@ -237,14 +240,14 @@ export default function PlayersPage() {
                   >
                     ↓
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => delPlayer(player.id)}
+                    className="inline-flex h-9 items-center justify-center rounded-xl border border-red-500 px-3 text-sm font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
+                  >
+                    Remove
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => delPlayer(player.id)}
-                  className="inline-flex items-center justify-center rounded-xl border border-red-500 px-4 py-2 text-sm font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                >
-                  Remove
-                </button>
               </li>
             );
           })}
