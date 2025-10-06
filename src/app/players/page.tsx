@@ -66,6 +66,33 @@ export default function PlayersPage() {
     }
   }
 
+  async function swapSeeds(playerId: string, direction: -1 | 1) {
+    if (!ensurePin()) return;
+
+    const index = sortedPlayers.findIndex((player) => player.id === playerId);
+    if (index < 0) return;
+
+    const current = sortedPlayers[index];
+    const neighbor = sortedPlayers[index + direction];
+
+    if (!neighbor || current.seed == null || neighbor.seed == null) {
+      setMsg("Cannot adjust seed order for this player yet.");
+      return;
+    }
+
+    try {
+      await Promise.all([
+        adminFetch("/api/admin/players/update", { id: current.id, seed: neighbor.seed }),
+        adminFetch("/api/admin/players/update", { id: neighbor.id, seed: current.seed }),
+      ]);
+      await load();
+      setMsg(`Moved ${current.name} ${direction === -1 ? "up" : "down"}.`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setMsg(`Error: ${message}`);
+    }
+  }
+
   const disabledAdd = !name || seed === "";
 
   return (
@@ -149,23 +176,48 @@ export default function PlayersPage() {
         </header>
 
         <ul className="divide-y divide-[color:var(--border)]">
-          {sortedPlayers.map((player) => (
-            <li key={player.id} className="flex flex-col gap-4 px-6 py-4 sm:flex-row sm:items-center sm:gap-6">
-              <span className="inline-flex min-w-[3.5rem] items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--highlight)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-[color:var(--accent)]">
-                #{player.seed ?? "—"}
-              </span>
-              <div className="flex-1 text-base font-medium text-[color:var(--foreground)]">
-                {player.name}
-              </div>
-              <button
-                type="button"
-                onClick={() => delPlayer(player.id)}
-                className="inline-flex items-center justify-center rounded-xl border border-red-500 px-4 py-2 text-sm font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-              >
-                Remove
-              </button>
-            </li>
-          ))}
+          {sortedPlayers.map((player, index) => {
+            const neighborUp = sortedPlayers[index - 1];
+            const neighborDown = sortedPlayers[index + 1];
+            const canMoveUp = !!(neighborUp && player.seed != null && neighborUp.seed != null);
+            const canMoveDown = !!(neighborDown && player.seed != null && neighborDown.seed != null);
+
+            return (
+              <li key={player.id} className="flex flex-col gap-4 px-6 py-4 sm:flex-row sm:items-center sm:gap-6">
+                <span className="inline-flex min-w-[3.5rem] items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--highlight)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-[color:var(--accent)]">
+                  #{player.seed ?? "—"}
+                </span>
+                <div className="flex-1 text-base font-medium text-[color:var(--foreground)]">
+                  {player.name}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => swapSeeds(player.id, -1)}
+                    disabled={!canMoveUp}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[color:var(--border)] text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => swapSeeds(player.id, 1)}
+                    disabled={!canMoveDown}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[color:var(--border)] text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    ↓
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => delPlayer(player.id)}
+                  className="inline-flex items-center justify-center rounded-xl border border-red-500 px-4 py-2 text-sm font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
+                >
+                  Remove
+                </button>
+              </li>
+            );
+          })}
 
           {!hasRoster && (
             <li className="px-6 py-8 text-sm text-[color:var(--muted)]">
