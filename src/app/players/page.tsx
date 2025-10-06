@@ -80,21 +80,45 @@ export default function PlayersPage() {
       return;
     }
 
+    let firstUpdateComplete = false;
     try {
       await adminFetch("/api/admin/players/update", {
         id: current.id,
         seed: neighbor.seed,
         allowSeedConflictWith: neighbor.id,
       });
+      firstUpdateComplete = true;
+
       await adminFetch("/api/admin/players/update", {
         id: neighbor.id,
         seed: current.seed,
         allowSeedConflictWith: current.id,
       });
+
       await load();
       setMsg(`Moved ${current.name} ${direction === -1 ? "up" : "down"}.`);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown error";
+
+      if (firstUpdateComplete) {
+        try {
+          await adminFetch("/api/admin/players/update", {
+            id: current.id,
+            seed: current.seed,
+            allowSeedConflictWith: neighbor.id,
+          });
+        } catch (revertError: unknown) {
+          const revertMessage =
+            revertError instanceof Error
+              ? revertError.message
+              : "Unknown error";
+          setMsg(
+            `Error: ${message}. Additionally failed to revert changes: ${revertMessage}`
+          );
+          return;
+        }
+      }
+
       setMsg(`Error: ${message}`);
     }
   }
