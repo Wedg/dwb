@@ -5,7 +5,12 @@ import { requireAdminPin } from '@/lib/adminAuth';
 export async function POST(req: Request) {
   try {
     requireAdminPin(req);
-    const { id, name, seed } = await req.json() as { id: string; name?: string; seed?: number };
+    const { id, name, seed, allowSeedConflictWith } = await req.json() as {
+      id: string;
+      name?: string;
+      seed?: number;
+      allowSeedConflictWith?: string | string[];
+    };
 
     if (!id) return NextResponse.json({ error: 'Player id required' }, { status: 400 });
 
@@ -21,8 +26,24 @@ export async function POST(req: Request) {
       if (!Number.isInteger(seed) || seed < 1 || seed > 16)
         return NextResponse.json({ error: 'Seed must be 1..16' }, { status: 400 });
       // unique seed
-      const { data: dupe } = await supabaseAdmin
-        .from('players').select('id').eq('event_id', eventId).eq('seed', seed).neq('id', id);
+      const allowList = new Set<string>();
+      if (typeof allowSeedConflictWith === 'string') allowList.add(allowSeedConflictWith);
+      else if (Array.isArray(allowSeedConflictWith)) {
+        for (const value of allowSeedConflictWith) allowList.add(value);
+      }
+
+      let dupQuery = supabaseAdmin
+        .from('players')
+        .select('id')
+        .eq('event_id', eventId)
+        .eq('seed', seed)
+        .neq('id', id);
+
+      for (const allowed of allowList) {
+        dupQuery = dupQuery.neq('id', allowed);
+      }
+
+      const { data: dupe } = await dupQuery;
       if ((dupe?.length ?? 0) > 0) return NextResponse.json({ error: `Seed ${seed} already taken` }, { status: 400 });
       patch.seed = seed;
     }

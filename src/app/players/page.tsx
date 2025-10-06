@@ -81,10 +81,16 @@ export default function PlayersPage() {
     }
 
     try {
-      await Promise.all([
-        adminFetch("/api/admin/players/update", { id: current.id, seed: neighbor.seed }),
-        adminFetch("/api/admin/players/update", { id: neighbor.id, seed: current.seed }),
-      ]);
+      await adminFetch("/api/admin/players/update", {
+        id: current.id,
+        seed: neighbor.seed,
+        allowSeedConflictWith: neighbor.id,
+      });
+      await adminFetch("/api/admin/players/update", {
+        id: neighbor.id,
+        seed: current.seed,
+        allowSeedConflictWith: current.id,
+      });
       await load();
       setMsg(`Moved ${current.name} ${direction === -1 ? "up" : "down"}.`);
     } catch (error: unknown) {
