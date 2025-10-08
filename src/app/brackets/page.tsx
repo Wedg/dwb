@@ -23,7 +23,7 @@ type Player = { id: string; name: string };
 const BRACKET_TITLES: Record<Bracket, string> = {
   MAIN: "DwB Spring Champs",
   LOWER: "Pudel König",
-  DOUBLES: "Anthony Prangley Silence of the Champs",
+  DOUBLES: "Anthony Prangley Twin Bishops and Bar Bill",
 };
 
 const BRACKET_THEMES: Record<
