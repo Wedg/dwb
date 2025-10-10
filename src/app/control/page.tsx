@@ -271,8 +271,25 @@ export default function ControlPage() {
       <section className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm sm:p-8">
         <h2 className="text-lg font-semibold">Quick actions</h2>
         <p className="mt-1 text-sm text-[color:var(--muted)]">
-          These endpoints update live data. You will be prompted for the admin PIN before continuing.
+          These buttons call admin endpoints that mutate the live bracket. Enter the PIN when prompted.
         </p>
+        <div className="mt-4 space-y-3 rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--background)]/70 p-4 text-sm text-[color:var(--muted)]">
+          <p className="font-semibold text-[color:var(--foreground)]">Suggested flow</p>
+          <ol className="list-decimal space-y-2 pl-4">
+            <li>Add and seed 16 players on the Players screen.</li>
+            <li>
+              Click <strong>Build singles bracket</strong> to create Round&nbsp;1 (if needed), generate all quarterfinal/semi/final
+              placeholders, and wire Round&nbsp;1 winners and losers into those slots.
+            </li>
+            <li>
+              Record match winners on the Matches page. Once Round&nbsp;1 winners are set they will automatically populate the quarterfinals.
+            </li>
+            <li>
+              After all eight quarterfinals have winners, use <strong>Build doubles bracket</strong> to create the doubles draw from the singles losers.
+            </li>
+            <li>Use the reset options sparingly if you need to clear data or regenerate Round&nbsp;1.</li>
+          </ol>
+        </div>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           <button
             type="button"
@@ -280,13 +297,17 @@ export default function ControlPage() {
             onClick={() =>
               action(async () => {
                 const res = await adminFetch<{ message?: string }>("/api/admin/build-singles", {});
-                setMsg(res?.message ?? "Singles wired.");
+                setMsg(res?.message ?? "Singles bracket ensured and Round 1 wired into the QFs.");
               })
             }
             className="rounded-2xl border border-[color:var(--accent)] bg-[color:var(--accent)] px-4 py-3 text-sm font-semibold text-[color:var(--accent-contrast)] shadow transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {busy ? "Working…" : "Create 4 QFs per bracket & wire R1"}
+            {busy ? "Working…" : "Build singles bracket (create & wire R1 → QFs)"}
           </button>
+          <p className="sm:col-span-2 text-sm text-[color:var(--muted)]">
+            Ensures Round&nbsp;1 exists using the seeded players, creates empty quarterfinal/semi/final matches in both the main and lower
+            brackets, and connects each Round&nbsp;1 match so winners feed into the main QFs and losers into the lower QFs.
+          </p>
 
           <button
             type="button"
@@ -294,13 +315,16 @@ export default function ControlPage() {
             onClick={() =>
               action(async () => {
                 const res = await adminFetch<{ message?: string }>("/api/admin/build-doubles", {});
-                setMsg(res?.message ?? "Doubles created.");
+                setMsg(res?.message ?? "Doubles draw created from the eight singles QF losers.");
               })
             }
             className="rounded-2xl border border-blue-900 bg-blue-900 px-4 py-3 text-sm font-semibold text-white shadow transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {busy ? "Working…" : "Build Doubles (from QF losers)"}
           </button>
+          <p className="sm:col-span-2 text-sm text-[color:var(--muted)]">
+            Creates two doubles semifinals and a final. Each doubles team is built from consecutive losers of the singles quarterfinals (1&2 vs 7&8 for balance).
+          </p>
 
           <button
             type="button"
@@ -308,13 +332,16 @@ export default function ControlPage() {
             onClick={() =>
               action(async () => {
                 const res = await adminFetch<{ message?: string }>("/api/admin/reset", { action: "matches_only" });
-                setMsg(res?.message ?? "All matches cleared.");
+                setMsg(res?.message ?? "All matches cleared. Player list remains untouched.");
               })
             }
             className="rounded-2xl border border-red-600 bg-transparent px-4 py-3 text-sm font-semibold text-red-600 shadow transition hover:bg-red-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {busy ? "Working…" : "Reset: Clear ALL matches"}
+            {busy ? "Working…" : "Reset: Delete all matches"}
           </button>
+          <p className="sm:col-span-2 text-sm text-[color:var(--muted)]">
+            Wipes every match (singles and doubles) for the current event. Use if you need to start bracket building again from scratch.
+          </p>
 
           <button
             type="button"
@@ -322,13 +349,17 @@ export default function ControlPage() {
             onClick={() =>
               action(async () => {
                 const res = await adminFetch<{ message?: string }>("/api/admin/reset", { action: "regen_r1" });
-                setMsg(res?.message ?? "Cleared + regenerated R1.");
+                setMsg(res?.message ?? "All matches cleared and Round 1 regenerated from the seeded players.");
               })
             }
             className="rounded-2xl border border-[color:var(--accent)] bg-[color:var(--accent)] px-4 py-3 text-sm font-semibold text-[color:var(--accent-contrast)] shadow transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {busy ? "Working…" : "Reset: Start fresh (R1 only)"}
+            {busy ? "Working…" : "Reset: Clear matches & rebuild Round 1"}
           </button>
+          <p className="sm:col-span-2 text-sm text-[color:var(--muted)]">
+            Deletes every match and immediately recreates the eight Round&nbsp;1 singles matches using the current 16 seeded players. Run
+            the singles builder afterwards to reconnect Round&nbsp;1 to the rest of the bracket.
+          </p>
         </div>
 
         {msg && (
