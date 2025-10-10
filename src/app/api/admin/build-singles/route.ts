@@ -165,6 +165,104 @@ export async function POST(req: Request) {
       if (updErr) throw new Error(updErr.message);
     }
 
+    const propagateTeam = async (
+      nextId: string | null,
+      team: string[] | null,
+      opponent: string[] | null,
+    ) => {
+      if (!nextId || !team || team.length === 0) return;
+
+      const { data: nm, error: nmErr } = await supabaseAdmin
+        .from('matches')
+        .select('id, team_a, team_b, winner')
+        .eq('id', nextId)
+        .maybeSingle();
+      if (nmErr || !nm) return;
+      if (nm.winner) return;
+
+      const a: string[] = Array.isArray(nm.team_a) ? nm.team_a : [];
+      const b: string[] = Array.isArray(nm.team_b) ? nm.team_b : [];
+
+      const eq = (x: string[], y: string[]) => x.length === y.length && x.every((id, i) => id === y[i]);
+      const overlap = (x: string[], y: string[]) => x.some((id) => y.includes(id));
+
+      const originPlayers = new Set([...(team ?? []), ...(opponent ?? [])]);
+      const aHasOrigin = a.some((id) => originPlayers.has(id));
+      const bHasOrigin = b.some((id) => originPlayers.has(id));
+      const aHasTeam = overlap(a, team);
+      const bHasTeam = overlap(b, team);
+
+      let target: 'a' | 'b' | null = null;
+      if (aHasTeam) target = 'a';
+      else if (bHasTeam) target = 'b';
+      else if (aHasOrigin && !bHasOrigin) target = 'a';
+      else if (bHasOrigin && !aHasOrigin) target = 'b';
+      else if (aHasOrigin && bHasOrigin) target = 'a';
+
+      if (aHasOrigin || bHasOrigin) {
+        const clearUpdates: { team_a?: string[]; team_b?: string[] } = {};
+        if (aHasOrigin && (target !== 'a' || !eq(a, team))) clearUpdates.team_a = [];
+        if (bHasOrigin && (target !== 'b' || !eq(b, team))) clearUpdates.team_b = [];
+
+        if (Object.keys(clearUpdates).length > 0) {
+          await supabaseAdmin.from('matches').update(clearUpdates).eq('id', nm.id);
+        }
+
+        const nextA = clearUpdates.team_a !== undefined ? [] : a;
+        const nextB = clearUpdates.team_b !== undefined ? [] : b;
+
+        if (target === 'a') {
+          if (!eq(nextA, team)) {
+            await supabaseAdmin.from('matches').update({ team_a: team }).eq('id', nm.id);
+          }
+          return;
+        }
+        if (target === 'b') {
+          if (!eq(nextB, team)) {
+            await supabaseAdmin.from('matches').update({ team_b: team }).eq('id', nm.id);
+          }
+          return;
+        }
+      }
+
+      if (eq(a, team) || eq(b, team)) return;
+      if (overlap(a, team) && a.length < team.length) {
+        await supabaseAdmin.from('matches').update({ team_a: team }).eq('id', nm.id);
+        return;
+      }
+      if (overlap(b, team) && b.length < team.length) {
+        await supabaseAdmin.from('matches').update({ team_b: team }).eq('id', nm.id);
+        return;
+      }
+      if (a.length === 0) {
+        await supabaseAdmin.from('matches').update({ team_a: team }).eq('id', nm.id);
+        return;
+      }
+      if (b.length === 0) {
+        await supabaseAdmin.from('matches').update({ team_b: team }).eq('id', nm.id);
+        return;
+      }
+    };
+
+    const { data: r1Winners, error: r1WinnersErr } = await supabaseAdmin
+      .from('matches')
+      .select('team_a, team_b, winner, feeds_winner_to, feeds_loser_to')
+      .eq('event_id', eventId)
+      .eq('stage', 'R1')
+      .eq('bracket', 'MAIN');
+    if (r1WinnersErr) return NextResponse.json({ error: r1WinnersErr.message }, { status: 400 });
+
+    for (const match of r1Winners ?? []) {
+      if (!match.winner) continue;
+      const teamA: string[] = Array.isArray(match.team_a) ? match.team_a : [];
+      const teamB: string[] = Array.isArray(match.team_b) ? match.team_b : [];
+      const winnerTeam = match.winner === 'A' ? teamA : teamB;
+      const loserTeam = match.winner === 'A' ? teamB : teamA;
+
+      await propagateTeam(match.feeds_winner_to as string | null, winnerTeam, loserTeam);
+      await propagateTeam(match.feeds_loser_to as string | null, loserTeam, winnerTeam);
+    }
+
     return NextResponse.json({ ok: true, message: 'R1 ensured (or created), QF/SF/F ensured, R1 wired.' });
   } catch (error: unknown) {
     if (error instanceof Response) return error; // 403 from requireAdminPin
