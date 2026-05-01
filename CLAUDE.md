@@ -32,6 +32,12 @@ src/
     supabaseAdmin.ts            server (service role)
     adminAuth.ts                requireAdminPin() — header check
     adminClient.ts              ensurePin() + adminFetch() — localStorage `dwb_admin_pin`
+    bracket.ts                  pure bracket logic (canonicalPairs, planPlaceTeam, …)
+    bracket.test.ts             vitest tests for bracket.ts
+db/
+  schema.sql                    tables + RLS policies + realtime publication
+docs/
+  SETUP.md                      step-by-step Supabase + Vercel walkthrough
 ```
 
 ## Data model invariants
@@ -75,10 +81,11 @@ A bunch of these were patched in PRs #7–17 (see `git log`); they're worth know
 - README path citations (`【F:...】`) reference some pre-rename paths (e.g. `src/app/players/add/route.ts` instead of `src/app/api/admin/players/add/route.ts`). The architecture description is still accurate.
 
 ## When making changes
-- Run `npm run lint` and `npm run build` before claiming done. There are no tests to run.
-- Bracket logic edits should be sanity-checked against a full walk-through: build singles → set R1 winners → set QF winners → build doubles → set SF/F winners → clear a result mid-stream. The UI is the only test harness.
-- Keep `canonicalPairs()` identical in `build-singles/route.ts` and `reset/route.ts`.
+- Run `npm run lint`, `npm test`, and `npm run build` before claiming done.
+- Bracket-logic changes belong in `src/lib/bracket.ts` (pure, no Supabase). The admin routes are thin wrappers that read from / write to Supabase and call into `bracket.ts`. Add a test in `bracket.test.ts` for any logic change — it's the only safety net we have for the propagation rules.
+- For end-to-end sanity, also walk through the UI: build singles → set R1 winners → QFs → build doubles → SF/F → clear a result mid-stream.
 - Admin endpoints expect `POST` with JSON body and the `x-admin-pin` header. New admin endpoints should call `requireAdminPin(req)` first and follow the existing `try/catch` pattern that re-throws `Response` instances.
+- Schema changes go in `db/schema.sql`. The file is idempotent — re-running it is safe.
 
 ## Git conventions
 - Develop branch `dev` exists for current resurrection work. Main is the deployed branch (Vercel auto-deploys it).
