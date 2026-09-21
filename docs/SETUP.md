@@ -62,6 +62,14 @@ You need three pieces of info from Supabase to give to Vercel.
 
 ## Part 2 — Vercel
 
+### 2.0 Check whether a Vercel project already exists
+
+Don't assume you're starting from zero here — only the Supabase project is confirmed gone. A Vercel security-bot PR (#19, merged May 2026) referenced a live project at `vercel.com/wedgs-projects/dwb-9nty`, so a project connected to this repo may still exist.
+
+1. Go to <https://vercel.com/dashboard> and look for a project already linked to `Wedg/dwb` (possibly named `dwb-9nty` or similar, not necessarily `dwb-theta` — that name only appears as a hardcoded fallback in the code, it isn't confirmed as the current production URL).
+2. **Found one?** Skip straight to 2.2 — open its **Settings → Environment Variables**, update the four values there (they almost certainly point at the deleted Supabase project), then jump to **Settings → Deployments** and redeploy. You don't need to re-import the repo.
+3. **Nothing there?** Follow 2.1 onward to import fresh.
+
 ### 2.1 Connect the GitHub repo
 
 1. Go to <https://vercel.com/new>.
@@ -133,6 +141,8 @@ To prevent it happening again, we can add a small GitHub Actions workflow that r
 **"No event found" on every page** → You skipped step 1.3. Run the `insert into public.events ...` SQL.
 
 **"Forbidden: bad admin PIN" when clicking buttons** → The PIN you typed in the browser doesn't match `ADMIN_PIN` in Vercel env vars. To reset: open browser DevTools → Application → Local Storage → delete `dwb_admin_pin`, refresh, retype.
+
+**Build fails immediately with `Error: supabaseUrl is required`** → All three Supabase env vars must be set *before* the first build, not just before runtime: `src/lib/supabaseAdmin.ts` calls `createClient()` at module load time, and Next.js imports every `api/admin/*` route during `next build` (the "Collecting page data" step) to prerender the rest of the app — so a missing/empty `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, or `SUPABASE_SERVICE_ROLE` fails the whole build, confirmed by reproducing it locally. Double-check all three are saved in Vercel's Environment Variables *before* triggering a deploy.
 
 **Build fails on Vercel with "Failed to fetch Geist from Google Fonts"** → This was a sandbox-only issue while developing; it shouldn't happen on Vercel. If it does, share the error.
 

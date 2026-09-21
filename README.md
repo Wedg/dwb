@@ -49,44 +49,12 @@ npm run lint
 npm run build
 ```
 
-## Supabase schema reference
-Below is a minimal schema that matches what the application expects. Adjust column defaults or constraints to suit your project.
+## Database schema
+The canonical schema lives in [`db/schema.sql`](./db/schema.sql) — paste it into the Supabase SQL editor for a fresh project (it's idempotent, safe to re-run). It creates `events`, `players`, and `matches`, enables row-level security with anon-**read-only** policies (writes only ever happen through the service-role key in the admin routes), and turns on the realtime publication for future live-update support.
 
-```sql
--- Events table – create a new row per tournament weekend
-create table if not exists public.events (
-  id uuid primary key default gen_random_uuid(),
-  name text,
-  created_at timestamptz default timezone('utc', now())
-);
+For a full guided walkthrough — new Supabase project → schema → Vercel env vars → deploy → smoke test — see [`docs/SETUP.md`](./docs/SETUP.md).
 
--- Players (exactly 16 per event, seeds 1..16)
-create table if not exists public.players (
-  id uuid primary key default gen_random_uuid(),
-  event_id uuid references public.events(id) on delete cascade,
-  name text not null,
-  seed int not null check (seed between 1 and 16),
-  created_at timestamptz default timezone('utc', now())
-);
-create unique index if not exists players_event_seed_idx on public.players(event_id, seed);
-
--- Matches for both singles and doubles draws
-create table if not exists public.matches (
-  id uuid primary key default gen_random_uuid(),
-  event_id uuid references public.events(id) on delete cascade,
-  bracket text not null check (bracket in ('MAIN','LOWER','DOUBLES')),
-  stage text not null check (stage in ('R1','QF','SF','F')),
-  round_num int not null,
-  team_a text[] not null default '{}',
-  team_b text[] not null default '{}',
-  winner text check (winner in ('A','B')),
-  feeds_winner_to uuid references public.matches(id),
-  feeds_loser_to uuid references public.matches(id),
-  is_doubles boolean not null default false,
-  created_at timestamptz default timezone('utc', now())
-);
-```
-The UI expects exactly 16 seeded singles players and uses the match wiring logic in the admin routes to connect winners/losers across brackets.【F:src/app/players/add/route.ts†L10-L29】【F:src/app/api/admin/build-singles/route.ts†L32-L167】【F:src/app/api/admin/build-doubles/route.ts†L22-L98】
+The UI expects exactly 16 seeded singles players and uses the match wiring logic in [`src/lib/bracket.ts`](./src/lib/bracket.ts) (called from the admin routes) to connect winners/losers across brackets.
 
 ## Typical TD workflow
 1. **Create the event row** in Supabase (or reuse the latest event record).
