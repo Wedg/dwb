@@ -6,6 +6,15 @@ You'll do the clicking; I'll handle the code-side updates (changing the QR-code 
 
 ---
 
+## Part 0 — Check before you rebuild
+
+Supabase's free tier *pauses* an inactive project first and only *deletes* it later (see Part 4). A paused project can be **resumed with one click and all data intact** — a very different outcome from a deleted one, which needs everything below.
+
+1. Log into <https://supabase.com/dashboard>.
+2. Look for a `dwb` (or similarly named) project, including under a "paused" filter/section.
+3. **Found it, paused?** Click **Resume**, wait for it to come back online, then skip to 1.4 to re-grab the keys (they don't change on resume) — you can skip schema creation and the event insert entirely.
+4. **Found it, but empty/broken, or genuinely gone?** Continue with Part 1 below to rebuild from scratch.
+
 ## Part 1 — Supabase
 
 ### 1.1 Create the project
