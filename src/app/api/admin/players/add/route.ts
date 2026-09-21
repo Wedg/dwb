@@ -13,9 +13,10 @@ export async function POST(req: Request) {
     }
 
     // latest event
-    const { data: ev } = await supabaseAdmin
+    const { data: ev, error: evErr } = await supabaseAdmin
       .from('events').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
-    if (!ev?.id) return NextResponse.json({ error: 'No event found' }, { status: 400 });
+    if (evErr) return NextResponse.json({ error: `Event lookup failed: ${evErr.message}` }, { status: 500 });
+    if (!ev) return NextResponse.json({ error: 'No event found' }, { status: 400 });
     const eventId = ev.id as string;
 
     // enforce max 16 and unique seed

@@ -15,9 +15,10 @@ export async function POST(req: Request) {
     if (!id) return NextResponse.json({ error: 'Player id required' }, { status: 400 });
 
     // latest event (for unique-seed check)
-    const { data: ev } = await supabaseAdmin
+    const { data: ev, error: evErr } = await supabaseAdmin
       .from('events').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
-    if (!ev?.id) return NextResponse.json({ error: 'No event found' }, { status: 400 });
+    if (evErr) return NextResponse.json({ error: `Event lookup failed: ${evErr.message}` }, { status: 500 });
+    if (!ev) return NextResponse.json({ error: 'No event found' }, { status: 400 });
     const eventId = ev.id as string;
 
     const patch: { name?: string; seed?: number } = {};
