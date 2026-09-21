@@ -53,7 +53,11 @@ Sanity check: left sidebar → **Table Editor** → click `events`. You should s
 
 ### 1.4 Capture the keys
 
-You need three pieces of info from Supabase to give to Vercel.
+There are two ways to get Supabase's keys into Vercel. Either works — the app's code accepts variable names from both.
+
+**Option A — the Vercel Integration (recommended, less error-prone).** In the Supabase dashboard, look for a "Vercel Integration" (Project Settings → Integrations, or search "Vercel" there), connect it, and point it at your Vercel project. It pushes `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and a handful of Postgres/JWT variables this app doesn't use (harmless to leave). It also keeps these in sync if you ever rotate keys — the manual copy in Option B does not. Skip straight to Part 2 once it's connected.
+
+**Option B — manual copy-paste.** You need three pieces of info from Supabase to give to Vercel.
 
 1. Left sidebar → click the gear icon **Project Settings** at the bottom.
 2. Click **API** in the settings menu.
@@ -88,7 +92,9 @@ Don't assume you're starting from zero here — only the Supabase project is con
 
 ### 2.2 Configure environment variables
 
-Before clicking Deploy, expand the **Environment Variables** section and add four entries:
+If you used the Vercel Integration (1.4 Option A), three of these four are already set — the code accepts either naming scheme (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SERVICE_ROLE_KEY` from the integration, or the manual names below). You still need to add `ADMIN_PIN` yourself — the integration has no way to know it.
+
+If you're doing it manually (1.4 Option B), before clicking Deploy expand the **Environment Variables** section and add four entries:
 
 | Name | Value |
 |---|---|
