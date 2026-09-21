@@ -2,9 +2,26 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { requireAdminPin } from '@/lib/adminAuth';
+import { planRemoveTeam, type MatchSlots, type Team } from '@/lib/bracket';
 
-const arraysEqual = (x: string[] = [], y: string[] = []) =>
-  x.length === y.length && x.every((id, i) => id === y[i]);
+async function removeTeam(nextId: string | null, team: Team) {
+  if (!nextId || team.length === 0) return;
+  const { data: nm, error } = await supabaseAdmin
+    .from('matches')
+    .select('id, team_a, team_b, winner')
+    .eq('id', nextId)
+    .maybeSingle();
+  if (error || !nm) return;
+  const slots: MatchSlots = {
+    team_a: Array.isArray(nm.team_a) ? nm.team_a : [],
+    team_b: Array.isArray(nm.team_b) ? nm.team_b : [],
+    winner: nm.winner ?? null,
+  };
+  const patch = planRemoveTeam(slots, team);
+  if (patch) {
+    await supabaseAdmin.from('matches').update(patch).eq('id', nm.id);
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -18,29 +35,9 @@ export async function POST(req: Request) {
       .maybeSingle();
     if (error || !m) return NextResponse.json({ error: 'Match not found' }, { status: 400 });
 
-    async function removeTeam(nextId: string | null, team: string[] | null) {
-      if (!nextId || !team || team.length === 0) return;
-      const { data: nm, error: nmErr } = await supabaseAdmin
-        .from('matches')
-        .select('id, team_a, team_b, winner')
-        .eq('id', nextId)
-        .maybeSingle();
-      if (nmErr || !nm) return;
-      if (nm.winner) return; // don't touch decided matches
-
-      const a: string[] = nm.team_a ?? [];
-      const b: string[] = nm.team_b ?? [];
-
-      if (arraysEqual(a, team)) {
-        await supabaseAdmin.from('matches').update({ team_a: [] }).eq('id', nm.id);
-      } else if (arraysEqual(b, team)) {
-        await supabaseAdmin.from('matches').update({ team_b: [] }).eq('id', nm.id);
-      }
-    }
-
     if (m.winner) {
-      const teamA: string[] = Array.isArray(m.team_a) ? m.team_a : [];
-      const teamB: string[] = Array.isArray(m.team_b) ? m.team_b : [];
+      const teamA: Team = Array.isArray(m.team_a) ? m.team_a : [];
+      const teamB: Team = Array.isArray(m.team_b) ? m.team_b : [];
       const winnerTeam = m.winner === 'A' ? teamA : teamB;
       const loserTeam  = m.winner === 'A' ? teamB : teamA;
 

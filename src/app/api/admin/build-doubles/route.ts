@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { requireAdminPin } from '@/lib/adminAuth';
+import { pairLosersIntoDoublesTeams } from '@/lib/bracket';
 
 type Stage = 'SF' | 'F';
 
@@ -13,7 +14,6 @@ export async function POST(req: Request) {
   try {
     requireAdminPin(req);
 
-    // Latest event
     const { data: ev, error: evErr } = await supabaseAdmin
       .from('events')
       .select('id')
@@ -23,7 +23,6 @@ export async function POST(req: Request) {
     if (evErr || !ev) return NextResponse.json({ error: 'No event found' }, { status: 400 });
     const eventId = ev.id as string;
 
-    // If doubles SF already exists, do nothing (idempotent)
     const { data: existing, error: exErr } = await supabaseAdmin
       .from('matches').select('id').eq('event_id', eventId).eq('bracket', 'DOUBLES').eq('stage', 'SF');
     if (exErr) return NextResponse.json({ error: exErr.message }, { status: 400 });
@@ -31,7 +30,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, message: 'Doubles already exists.' });
     }
 
-    // Load QFs (both MAIN and LOWER) with winners
     const { data: qfAll, error: qErr } = await supabaseAdmin
       .from('matches')
       .select('id, team_a, team_b, winner, bracket, stage')
@@ -41,34 +39,35 @@ export async function POST(req: Request) {
     const qfs = (qfAll ?? []).filter(m => m.bracket === 'MAIN' || m.bracket === 'LOWER');
     if (qfs.length !== 8) return NextResponse.json({ error: `Expected 8 QFs (MAIN+LOWER), found ${qfs.length}` }, { status: 400 });
 
-    // Ensure all QFs have winners & both slots set
     for (const m of qfs) {
       if (!m.winner) return NextResponse.json({ error: 'All QFs must have a winner before building doubles.' }, { status: 400 });
       if (!m.team_a?.length || !m.team_b?.length) return NextResponse.json({ error: 'QF teams incomplete.' }, { status: 400 });
     }
 
-    // Collect the 8 losers (singles → 1 id each)
     const losers: string[] = qfs.map((m) => (m.winner === 'A' ? (m.team_b![0]) : (m.team_a![0])));
 
-    // Pair sequentially into 4 teams of 2
-    if (losers.length !== 8) return NextResponse.json({ error: 'Need 8 losers to build doubles.' }, { status: 400 });
-    const teams: [string, string][] = [];
-    for (let i = 0; i < losers.length; i += 2) teams.push([losers[i], losers[i + 1]]);
+    let pairing;
+    try {
+      pairing = pairLosersIntoDoublesTeams(losers);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Pairing failed';
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
 
-    // Build 2 SF + 1 Final (pair 1v4 and 2v3 for small balance)
     const sf1 = uuid();
     const sf2 = uuid();
     const fId = uuid();
+    const [matchupA, matchupB] = pairing.sfMatchups;
 
     const rows = [
       {
         id: sf1, event_id: eventId, bracket: 'DOUBLES', stage: 'SF' as Stage, round_num: 3,
-        is_doubles: true, team_a: teams[0] as unknown as string[], team_b: teams[3] as unknown as string[],
+        is_doubles: true, team_a: matchupA[0] as unknown as string[], team_b: matchupA[1] as unknown as string[],
         feeds_winner_to: fId, feeds_loser_to: null,
       },
       {
         id: sf2, event_id: eventId, bracket: 'DOUBLES', stage: 'SF' as Stage, round_num: 3,
-        is_doubles: true, team_a: teams[1] as unknown as string[], team_b: teams[2] as unknown as string[],
+        is_doubles: true, team_a: matchupB[0] as unknown as string[], team_b: matchupB[1] as unknown as string[],
         feeds_winner_to: fId, feeds_loser_to: null,
       },
       {
@@ -83,7 +82,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, message: 'Doubles created: 2 SF + Final.' });
   } catch (error: unknown) {
-    if (error instanceof Response) return error; // 403 from requireAdminPin
+    if (error instanceof Response) return error;
     const message = error instanceof Error ? error.message : 'Server error';
     return NextResponse.json({ error: message }, { status: 500 });
   }

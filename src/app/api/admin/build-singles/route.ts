@@ -2,6 +2,14 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { requireAdminPin } from '@/lib/adminAuth';
+import {
+  canonicalPairs,
+  findCanonicalSlot,
+  planPlaceTeam,
+  r1SlotToQfIndex,
+  type MatchSlots,
+  type Team,
+} from '@/lib/bracket';
 
 type Bracket = 'MAIN' | 'LOWER';
 type Stage = 'R1' | 'QF' | 'SF' | 'F';
@@ -10,16 +18,29 @@ function uuid() {
   return (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).toString();
 }
 
-// Canonical R1 seed pairs for a 16-player draw
-function canonicalPairs(): [number, number][] {
-  return [[1,16],[8,9],[5,12],[4,13],[3,14],[6,11],[7,10],[2,15]];
+async function placeTeam(nextId: string | null, team: Team, opponent: Team) {
+  if (!nextId || team.length === 0) return;
+  const { data: nm, error } = await supabaseAdmin
+    .from('matches')
+    .select('id, team_a, team_b, winner')
+    .eq('id', nextId)
+    .maybeSingle();
+  if (error || !nm) return;
+  const slots: MatchSlots = {
+    team_a: Array.isArray(nm.team_a) ? nm.team_a : [],
+    team_b: Array.isArray(nm.team_b) ? nm.team_b : [],
+    winner: nm.winner ?? null,
+  };
+  const patch = planPlaceTeam(slots, team, opponent);
+  if (patch) {
+    await supabaseAdmin.from('matches').update(patch).eq('id', nm.id);
+  }
 }
 
 export async function POST(req: Request) {
   try {
     requireAdminPin(req);
 
-    // Latest event
     const { data: ev, error: evErr } = await supabaseAdmin
       .from('events')
       .select('id')
@@ -29,7 +50,6 @@ export async function POST(req: Request) {
     if (evErr || !ev) return NextResponse.json({ error: 'No event found' }, { status: 400 });
     const eventId = ev.id as string;
 
-    // Load players (need 16 with seeds)
     const { data: players, error: pErr } = await supabaseAdmin
       .from('players')
       .select('id,seed')
@@ -39,18 +59,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Expected 16 players, found ${players?.length ?? 0}.` }, { status: 400 });
     }
 
-    // Build seed→id map
     const bySeed = new Map<number, string>();
     for (const p of players) {
       if (p.seed == null) return NextResponse.json({ error: 'All 16 players must have a seed (1..16).' }, { status: 400 });
       bySeed.set(p.seed, p.id);
     }
-    // Sanity: make sure we have seeds 1..16
     for (let s = 1; s <= 16; s++) {
       if (!bySeed.get(s)) return NextResponse.json({ error: `Missing player with seed ${s}.` }, { status: 400 });
     }
 
-    // Ensure R1 (MAIN) exists — create if missing
+    // Ensure R1 (MAIN) exists.
     const { data: r1Existing, error: r1Err } = await supabaseAdmin
       .from('matches')
       .select('id')
@@ -75,7 +93,6 @@ export async function POST(req: Request) {
       if (insR1Err) return NextResponse.json({ error: insR1Err.message }, { status: 400 });
     }
 
-    // Fetch the (now ensured) R1 list
     const { data: r1, error: r1FetchErr } = await supabaseAdmin
       .from('matches')
       .select('id,team_a,team_b,stage,bracket,round_num')
@@ -85,7 +102,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Expected 8 R1 matches (MAIN), found ${r1?.length ?? 0}` }, { status: 400 });
     }
 
-    // Helper: ensure 4 QF, 2 SF, 1 F per bracket
     async function ensureSkeleton(bracket: Bracket) {
       const { data: qfs, error: qErr } = await supabaseAdmin
         .from('matches').select('id').eq('event_id', eventId).eq('bracket', bracket).eq('stage', 'QF');
@@ -130,120 +146,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'QF skeleton incomplete.' }, { status: 400 });
     }
 
-    // Build seed map for R1 matches
     const seedById = new Map<string, number>();
-    for (const s of Array.from(bySeed.keys())) {
-      const pid = bySeed.get(s)!;
-      seedById.set(pid, s);
+    for (const s of bySeed.keys()) {
+      seedById.set(bySeed.get(s)!, s);
     }
 
-    const canon = canonicalPairs().map(([a,b]) => `${Math.min(a,b)}-${Math.max(a,b)}`);
-    const wirings: { r1Id: string; slotIndex: number }[] = [];
-
+    // Wire each R1 match: winners → main QF, losers → lower QF.
     for (const m of r1) {
       const aId = (m.team_a?.[0]) ?? '';
       const bId = (m.team_b?.[0]) ?? '';
       const sa = seedById.get(aId)!;
       const sb = seedById.get(bId)!;
-      const key = `${Math.min(sa, sb)}-${Math.max(sa, sb)}`;
-      const slotIndex = canon.indexOf(key);
+      const slotIndex = findCanonicalSlot(sa, sb);
       if (slotIndex === -1) {
         return NextResponse.json({ error: `R1 match with seeds (${sa},${sb}) not canonical.` }, { status: 400 });
       }
-      wirings.push({ r1Id: m.id, slotIndex });
-    }
 
-    // Two R1 slots per QF: 0–1→QF0, 2–3→QF1, 4–5→QF2, 6–7→QF3
-    for (const w of wirings) {
-      const targetQfIndex = Math.floor(w.slotIndex / 2);
+      const targetQfIndex = r1SlotToQfIndex(slotIndex);
       const mainQfTarget  = qfMainIds[targetQfIndex];
       const lowerQfTarget = qfLowerIds[targetQfIndex];
+
       const { error: updErr } = await supabaseAdmin
         .from('matches')
         .update({ feeds_winner_to: mainQfTarget, feeds_loser_to: lowerQfTarget })
-        .eq('id', w.r1Id);
+        .eq('id', m.id);
       if (updErr) throw new Error(updErr.message);
     }
 
-    const propagateTeam = async (
-      nextId: string | null,
-      team: string[] | null,
-      opponent: string[] | null,
-    ) => {
-      if (!nextId || !team || team.length === 0) return;
-
-      const { data: nm, error: nmErr } = await supabaseAdmin
-        .from('matches')
-        .select('id, team_a, team_b, winner')
-        .eq('id', nextId)
-        .maybeSingle();
-      if (nmErr || !nm) return;
-      if (nm.winner) return;
-
-      const a: string[] = Array.isArray(nm.team_a) ? nm.team_a : [];
-      const b: string[] = Array.isArray(nm.team_b) ? nm.team_b : [];
-
-      const eq = (x: string[], y: string[]) => x.length === y.length && x.every((id, i) => id === y[i]);
-      const overlap = (x: string[], y: string[]) => x.some((id) => y.includes(id));
-
-      const originPlayers = new Set([...(team ?? []), ...(opponent ?? [])]);
-      const aHasOrigin = a.some((id) => originPlayers.has(id));
-      const bHasOrigin = b.some((id) => originPlayers.has(id));
-      const aHasTeam = overlap(a, team);
-      const bHasTeam = overlap(b, team);
-
-      let target: 'a' | 'b' | null = null;
-      if (aHasTeam) target = 'a';
-      else if (bHasTeam) target = 'b';
-      else if (aHasOrigin && !bHasOrigin) target = 'a';
-      else if (bHasOrigin && !aHasOrigin) target = 'b';
-      else if (aHasOrigin && bHasOrigin) target = 'a';
-
-      if (aHasOrigin || bHasOrigin) {
-        const clearUpdates: { team_a?: string[]; team_b?: string[] } = {};
-        if (aHasOrigin && (target !== 'a' || !eq(a, team))) clearUpdates.team_a = [];
-        if (bHasOrigin && (target !== 'b' || !eq(b, team))) clearUpdates.team_b = [];
-
-        if (Object.keys(clearUpdates).length > 0) {
-          await supabaseAdmin.from('matches').update(clearUpdates).eq('id', nm.id);
-        }
-
-        const nextA = clearUpdates.team_a !== undefined ? [] : a;
-        const nextB = clearUpdates.team_b !== undefined ? [] : b;
-
-        if (target === 'a') {
-          if (!eq(nextA, team)) {
-            await supabaseAdmin.from('matches').update({ team_a: team }).eq('id', nm.id);
-          }
-          return;
-        }
-        if (target === 'b') {
-          if (!eq(nextB, team)) {
-            await supabaseAdmin.from('matches').update({ team_b: team }).eq('id', nm.id);
-          }
-          return;
-        }
-      }
-
-      if (eq(a, team) || eq(b, team)) return;
-      if (overlap(a, team) && a.length < team.length) {
-        await supabaseAdmin.from('matches').update({ team_a: team }).eq('id', nm.id);
-        return;
-      }
-      if (overlap(b, team) && b.length < team.length) {
-        await supabaseAdmin.from('matches').update({ team_b: team }).eq('id', nm.id);
-        return;
-      }
-      if (a.length === 0) {
-        await supabaseAdmin.from('matches').update({ team_a: team }).eq('id', nm.id);
-        return;
-      }
-      if (b.length === 0) {
-        await supabaseAdmin.from('matches').update({ team_b: team }).eq('id', nm.id);
-        return;
-      }
-    };
-
+    // Backfill QFs from any R1 matches that already have winners.
     const { data: r1Winners, error: r1WinnersErr } = await supabaseAdmin
       .from('matches')
       .select('team_a, team_b, winner, feeds_winner_to, feeds_loser_to')
@@ -254,18 +184,18 @@ export async function POST(req: Request) {
 
     for (const match of r1Winners ?? []) {
       if (!match.winner) continue;
-      const teamA: string[] = Array.isArray(match.team_a) ? match.team_a : [];
-      const teamB: string[] = Array.isArray(match.team_b) ? match.team_b : [];
+      const teamA: Team = Array.isArray(match.team_a) ? match.team_a : [];
+      const teamB: Team = Array.isArray(match.team_b) ? match.team_b : [];
       const winnerTeam = match.winner === 'A' ? teamA : teamB;
       const loserTeam = match.winner === 'A' ? teamB : teamA;
 
-      await propagateTeam(match.feeds_winner_to as string | null, winnerTeam, loserTeam);
-      await propagateTeam(match.feeds_loser_to as string | null, loserTeam, winnerTeam);
+      await placeTeam(match.feeds_winner_to as string | null, winnerTeam, loserTeam);
+      await placeTeam(match.feeds_loser_to as string | null, loserTeam, winnerTeam);
     }
 
     return NextResponse.json({ ok: true, message: 'R1 ensured (or created), QF/SF/F ensured, R1 wired.' });
   } catch (error: unknown) {
-    if (error instanceof Response) return error; // 403 from requireAdminPin
+    if (error instanceof Response) return error;
     const message = error instanceof Error ? error.message : 'Server error';
     return NextResponse.json({ error: message }, { status: 500 });
   }
