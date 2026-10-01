@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { adminFetch, ensurePin } from "@/lib/adminClient";
 import { supabase } from "@/lib/supabaseClient";
+import { drawOrder } from "@/lib/bracket";
+import { Toast, type ToastMessage } from "@/components/Toast";
 
 type Bracket = "MAIN" | "LOWER" | "DOUBLES";
 type Stage = "R1" | "QF" | "SF" | "F";
@@ -84,8 +86,8 @@ export default function MatchesPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [winner, setWinner] = useState<"A" | "B" | "">("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<ToastMessage | null>(null);
   const [collapsed, setCollapsed] = useState<Record<Bracket, boolean>>({
     MAIN: false,
     LOWER: false,
@@ -97,6 +99,11 @@ export default function MatchesPage() {
     players.forEach((player) => map.set(player.id, player.name));
     return map;
   }, [players]);
+
+  const seedById = useMemo(
+    () => new Map(players.map((player) => [player.id, player.seed])),
+    [players]
+  );
 
   async function refreshMatches(currentEventId: string | null) {
     if (!currentEventId) return;
@@ -176,57 +183,48 @@ export default function MatchesPage() {
       {} as Record<Bracket, Record<Stage, MatchRow[]>>
     );
 
-    matches.forEach((match) => {
+    // Draw order: each round lines up with the matches that feed it.
+    drawOrder(matches, (id) => seedById.get(id)).forEach((match) => {
       base[match.bracket][match.stage].push(match);
     });
 
-    BRACKET_ORDER.forEach((bracket) => {
-      STAGE_ORDER.forEach((stage) => {
-        base[bracket][stage].sort((a, b) => {
-          const roundDelta = (a.round_num ?? 0) - (b.round_num ?? 0);
-          if (roundDelta !== 0) return roundDelta;
-          return a.id.localeCompare(b.id);
-        });
-      });
-    });
-
     return base;
-  }, [matches]);
+  }, [matches, seedById]);
 
-  function openEdit(match: MatchRow) {
-    setEditingId(match.id);
-    setWinner((match.winner ?? "") as "A" | "B" | "");
-  }
-
-  async function onSave() {
-    if (!editingId) return;
-    if (winner !== "A" && winner !== "B") {
-      alert("Pick A or B");
-      return;
-    }
-    if (!ensurePin()) return;
+  async function run(action: () => Promise<string>) {
+    if (busy || !ensurePin()) return;
+    setBusy(true);
     try {
-      await adminFetch("/api/admin/set-winner", { matchId: editingId, winner });
-      await refreshMatches(eventId);
-      setEditingId(null);
-      setWinner("");
+      setMsg({ text: await action() });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed";
-      alert(message);
+      setMsg({ text: `Error: ${message}`, error: true });
+    } finally {
+      await refreshMatches(eventId).catch(() => {});
+      setBusy(false);
     }
   }
 
-  async function onClear(matchId: string) {
-    if (!ensurePin()) return;
-    try {
-      await adminFetch("/api/admin/clear-result", { matchId });
-      await refreshMatches(eventId);
-      setEditingId(null);
-      setWinner("");
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to clear";
-      alert(message);
-    }
+  function pickWinner(match: MatchRow, side: "A" | "B") {
+    const name = playerLabel(side === "A" ? match.team_a : match.team_b);
+    const other = playerLabel(side === "A" ? match.team_b : match.team_a);
+    const question = match.winner
+      ? `Change the result: ${name} beat ${other}?`
+      : `${name} beat ${other}?`;
+    if (!confirm(question)) return;
+    void run(async () => {
+      await adminFetch("/api/admin/set-winner", { matchId: match.id, winner: side });
+      return `${name} wins.`;
+    });
+  }
+
+  function clearResult(match: MatchRow) {
+    const label = `${playerLabel(match.team_a)} v ${playerLabel(match.team_b)}`;
+    if (!confirm(`Clear the result of ${label}?`)) return;
+    void run(async () => {
+      await adminFetch("/api/admin/clear-result", { matchId: match.id });
+      return `Cleared ${label}.`;
+    });
   }
 
   return (
@@ -330,7 +328,7 @@ export default function MatchesPage() {
                         </div>
                         <div className="grid gap-4">
                           {rounds[stage].map((match) => {
-                            const isEditing = editingId === match.id;
+                            const ready = match.team_a.length > 0 && match.team_b.length > 0;
                             return (
                               <article
                                 key={match.id}
@@ -347,96 +345,63 @@ export default function MatchesPage() {
                                   </div>
                                   {match.winner && (
                                     <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--highlight)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--accent)]">
-                                      Winner · {match.winner}
+                                      Played
                                     </span>
                                   )}
                                 </div>
 
                                 <div className="mt-4 space-y-3">
-                                  {["A", "B"].map((side) => {
+                                  {(["A", "B"] as const).map((side) => {
                                     const label = side === "A" ? playerLabel(match.team_a) : playerLabel(match.team_b);
                                     const isWinner = match.winner === side;
+                                    const isLoser = !!match.winner && !isWinner;
                                     return (
-                                      <div
+                                      <button
                                         key={side}
-                                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--highlight)] px-3 py-3 text-sm"
+                                        type="button"
+                                        onClick={() => pickWinner(match, side)}
+                                        disabled={busy || !ready || isWinner}
+                                        className={`flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border bg-[color:var(--highlight)] px-3 py-3 text-left text-sm transition enabled:cursor-pointer enabled:hover:border-[color:var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] disabled:cursor-default ${
+                                          isWinner ? "border-[color:var(--accent)]" : "border-[color:var(--border)]"
+                                        } ${isLoser ? "opacity-60" : ""}`}
                                       >
-                                        <div className="flex items-center gap-3 text-left">
-                                          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--accent)] text-xs font-semibold text-[color:var(--accent-contrast)]">
+                                        <span className="flex items-center gap-3">
+                                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color:var(--accent)] text-xs font-semibold text-[color:var(--accent-contrast)]">
                                             {side}
                                           </span>
                                           <span className="text-pretty font-medium text-[color:var(--foreground)]">
                                             {label}
                                           </span>
-                                        </div>
+                                        </span>
                                         {isWinner && (
                                           <span className="text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--accent)]">
                                             Winner
                                           </span>
                                         )}
-                                      </div>
+                                      </button>
                                     );
                                   })}
                                 </div>
 
-                                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                  <button
-                                    type="button"
-                                    onClick={() => openEdit(match)}
-                                    className="inline-flex items-center justify-center rounded-xl border border-[color:var(--accent)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-[color:var(--accent-contrast)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                                  >
-                                    {isEditing ? "Editing" : "Set winner"}
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => onClear(match.id)}
-                                    className="inline-flex items-center justify-center rounded-xl border border-red-500 px-4 py-2 text-sm font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                                  >
-                                    Clear result
-                                  </button>
+                                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                                  <p className="text-xs text-[color:var(--muted)]">
+                                    {!ready
+                                      ? "Waiting for players."
+                                      : match.winner
+                                        ? "Tap the other name to change the result."
+                                        : "Tap the winner's name."}
+                                  </p>
+                                  {match.winner && (
+                                    <button
+                                      type="button"
+                                      onClick={() => clearResult(match)}
+                                      disabled={busy}
+                                      className="inline-flex items-center justify-center rounded-xl border border-red-500 px-4 py-2 text-sm font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      Clear result
+                                    </button>
+                                  )}
                                 </div>
-
-                                {isEditing && (
-                                  <fieldset className="mt-4 grid gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--highlight)] p-4 text-sm">
-                                    <legend className="text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
-                                      Choose side
-                                    </legend>
-                                    {(["A", "B"] as const).map((side) => (
-                                      <label key={side} className="flex items-center justify-between gap-3">
-                                        <span className="font-medium text-[color:var(--foreground)]">
-                                          {match.is_doubles ? `Team ${side}` : side}
-                                        </span>
-                                        <input
-                                          type="radio"
-                                          name={`winner-${match.id}`}
-                                          value={side}
-                                          checked={winner === side}
-                                          onChange={() => setWinner(side)}
-                                        />
-                                      </label>
-                                    ))}
-                                    <div className="flex flex-wrap items-center gap-3 pt-2">
-                                      <button
-                                        type="button"
-                                        onClick={onSave}
-                                        className="inline-flex items-center justify-center rounded-xl bg-[color:var(--accent)] px-4 py-2 text-sm font-semibold text-[color:var(--accent-contrast)] shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                                      >
-                                        Save winner
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditingId(null);
-                                          setWinner("");
-                                        }}
-                                        className="inline-flex items-center justify-center rounded-xl border border-[color:var(--border)] px-4 py-2 text-sm font-semibold text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                                      >
-                                        Cancel
-                                      </button>
-                                    </div>
-                                  </fieldset>
-                                )}
                               </article>
                             );
                           })}
@@ -454,6 +419,8 @@ export default function MatchesPage() {
           })}
         </div>
       )}
+
+      <Toast msg={msg} onClose={setMsg} />
     </main>
   );
 }

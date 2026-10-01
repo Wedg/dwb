@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   canonicalPairs,
+  drawOrder,
   findCanonicalSlot,
   pairLosersIntoDoublesTeams,
+  planDoublesSwaps,
   planPlaceTeam,
   planRemoveTeam,
+  qfWiringOrder,
   r1SlotToQfIndex,
+  resultChangeProblem,
+  shuffled,
   type MatchSlots,
+  type WiredMatch,
 } from "./bracket";
 
 const empty = (): MatchSlots => ({ team_a: [], team_b: [], winner: null });
@@ -253,5 +259,136 @@ describe("end-to-end singles propagation", () => {
     p = planPlaceTeam(lowerQf0, ["P1"], ["P16"]);
     if (p) lowerQf0 = { ...lowerQf0, ...p };
     expect(lowerQf0.team_a).toEqual(["P1"]);
+  });
+});
+
+describe("shuffled", () => {
+  it("returns a permutation and leaves the input alone", () => {
+    const input = [1, 2, 3, 4, 5];
+    const out = shuffled(input);
+    expect([...out].sort()).toEqual(input);
+    expect(input).toEqual([1, 2, 3, 4, 5]);
+  });
+});
+
+describe("qfWiringOrder", () => {
+  it("puts QFs that feed the same SF next to each other", () => {
+    // Ids sort as a, b, c, d but a+c feed SF "s2" and b+d feed SF "s1":
+    // sorting by id alone would pair the wrong QFs in each semi.
+    const order = qfWiringOrder([
+      { id: "a", feeds_winner_to: "s2" },
+      { id: "b", feeds_winner_to: "s1" },
+      { id: "c", feeds_winner_to: "s2" },
+      { id: "d", feeds_winner_to: "s1" },
+    ]);
+    expect(order).toEqual(["b", "d", "a", "c"]);
+  });
+
+  it("wires R1 slots 0-3 into one semi and 4-7 into the other", () => {
+    const sfOf = new Map([["q1", "sfX"], ["q2", "sfY"], ["q3", "sfX"], ["q4", "sfY"]]);
+    const order = qfWiringOrder([...sfOf].map(([id, sf]) => ({ id, feeds_winner_to: sf })));
+    const semiOfSlot = (slot: number) => sfOf.get(order[r1SlotToQfIndex(slot)]);
+    for (const slot of [1, 2, 3]) expect(semiOfSlot(slot)).toBe(semiOfSlot(0));
+    for (const slot of [5, 6, 7]) expect(semiOfSlot(slot)).toBe(semiOfSlot(4));
+    expect(semiOfSlot(0)).not.toBe(semiOfSlot(4));
+  });
+});
+
+describe("drawOrder", () => {
+  // A fully wired MAIN + LOWER bracket with ids deliberately out of order.
+  const seedOf = (id: string) => Number(id.slice(1)); // "P7" -> 7
+  const m = (id: string, stage: WiredMatch["stage"], a: string[], b: string[], win: string | null, lose: string | null = null): WiredMatch => ({
+    id, stage, team_a: a, team_b: b, feeds_winner_to: win, feeds_loser_to: lose,
+  });
+  const matches: WiredMatch[] = [
+    m("f", "F", [], [], null),
+    m("sf-z", "SF", [], [], "f"),
+    m("sf-a", "SF", [], [], "f"),
+    m("qf-1", "QF", [], [], "sf-z"),
+    m("qf-2", "QF", [], [], "sf-a"),
+    m("qf-3", "QF", [], [], "sf-z"),
+    m("qf-4", "QF", [], [], "sf-a"),
+    m("r1-h", "R1", ["P2"], ["P15"], "qf-4", "lqf"),
+    m("r1-a", "R1", ["P7"], ["P10"], "qf-4", "lqf"),
+    m("r1-g", "R1", ["P1"], ["P16"], "qf-1", "lqf"),
+    m("r1-b", "R1", ["P9"], ["P8"], "qf-1", "lqf"),
+    m("r1-c", "R1", ["P5"], ["P12"], "qf-3"),
+    m("r1-d", "R1", ["P4"], ["P13"], "qf-3"),
+    m("r1-e", "R1", ["P3"], ["P14"], "qf-2"),
+    m("r1-f", "R1", ["P6"], ["P11"], "qf-2"),
+    m("lqf", "QF", [], [], null),
+  ];
+  const ids = (stage: WiredMatch["stage"]) =>
+    drawOrder(matches, seedOf).filter((x) => x.stage === stage).map((x) => x.id);
+
+  it("orders R1 by canonical slot", () => {
+    expect(ids("R1")).toEqual(["r1-g", "r1-b", "r1-c", "r1-d", "r1-e", "r1-f", "r1-a", "r1-h"]);
+  });
+
+  it("orders later rounds by the earliest slot feeding them", () => {
+    // lqf (a Pudel König QF) is fed by the same R1 slots as qf-1, so it ties
+    // with it; the pages show each bracket separately, so ties only meet by id.
+    expect(ids("QF")).toEqual(["lqf", "qf-1", "qf-3", "qf-2", "qf-4"]);
+    expect(ids("SF")).toEqual(["sf-z", "sf-a"]);
+  });
+
+  it("puts unfed matches last, by id", () => {
+    const loose = [m("y", "SF", [], [], "f"), m("x", "SF", [], [], "f"), m("f", "F", [], [], null)];
+    expect(drawOrder(loose, seedOf).map((x) => x.id)).toEqual(["f", "x", "y"]);
+  });
+});
+
+describe("resultChangeProblem", () => {
+  const played: MatchSlots = { team_a: ["P1"], team_b: ["P2"], winner: null };
+
+  it("allows a first result", () => {
+    expect(resultChangeProblem(played, "A", false)).toBeNull();
+  });
+
+  it("refuses a winner while a side is still TBD", () => {
+    expect(resultChangeProblem({ ...played, team_b: [] }, "A", false)).toMatch(/need players/);
+  });
+
+  it("allows correcting a result until the next match is decided", () => {
+    const decided: MatchSlots = { ...played, winner: "A" };
+    expect(resultChangeProblem(decided, "B", false)).toBeNull();
+    expect(resultChangeProblem(decided, null, false)).toBeNull();
+    expect(resultChangeProblem(decided, "B", true)).toMatch(/Clear that result first/);
+    expect(resultChangeProblem(decided, null, true)).toMatch(/Clear that result first/);
+  });
+
+  it("treats re-saving the same result as fine", () => {
+    expect(resultChangeProblem({ ...played, winner: "A" }, "A", true)).toBeNull();
+    expect(resultChangeProblem(played, null, true)).toBeNull();
+  });
+});
+
+describe("planDoublesSwaps", () => {
+  // Eight QFs: QF i is "Wi" vs "Li", and A (Wi) won.
+  const qfs = (): MatchSlots[] =>
+    Array.from({ length: 8 }, (_, i) => ({ team_a: [`W${i}`], team_b: [`L${i}`], winner: "A" as const }));
+  const drawn = ["L3", "L0", "L6", "L1", "L2", "L7", "L4", "L5"];
+
+  it("is empty when the draw matches the QF losers", () => {
+    expect(planDoublesSwaps(qfs(), drawn)).toEqual(new Map());
+  });
+
+  it("swaps in whoever now lost a corrected QF", () => {
+    const corrected = qfs();
+    corrected[6] = { ...corrected[6], winner: "B" }; // L6 actually won, W6 lost
+    corrected[1] = { ...corrected[1], winner: "B" };
+    expect(planDoublesSwaps(corrected, drawn)).toEqual(new Map([["L6", "W6"], ["L1", "W1"]]));
+  });
+
+  it("gives up when a drawn player isn't in any QF any more", () => {
+    const changed = qfs();
+    changed[2] = { team_a: ["W2"], team_b: ["NEW"], winner: "A" }; // R1 correction moved players
+    expect(planDoublesSwaps(changed, drawn)).toBeNull();
+  });
+
+  it("gives up when a QF has no result", () => {
+    const open = qfs();
+    open[0] = { ...open[0], winner: null };
+    expect(planDoublesSwaps(open, drawn)).toBeNull();
   });
 });

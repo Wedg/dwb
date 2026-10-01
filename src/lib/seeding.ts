@@ -7,6 +7,8 @@
 // momentary duplicate in a swap when both rows change in the same statement
 // (see players_event_seed_key in db/schema.sql) — never write them one by one.
 
+import { shuffled } from "./bracket";
+
 export const MAX_PLAYERS = 16;
 
 export type SeededPlayer = { id: string; name: string; seed: number };
@@ -127,11 +129,7 @@ export function planShuffle(
   players: SeededPlayer[],
   random: () => number = Math.random,
 ): SeedChange[] {
-  const seeds = players.map((p) => p.seed);
-  for (let i = seeds.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [seeds[i], seeds[j]] = [seeds[j], seeds[i]];
-  }
+  const seeds = shuffled(players.map((p) => p.seed), random);
   return players.flatMap((p, i) => (seeds[i] === p.seed ? [] : [{ id: p.id, seed: seeds[i] }]));
 }
 

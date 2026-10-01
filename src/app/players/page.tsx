@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { ensurePin, adminFetch } from "@/lib/adminClient";
 import { supabase } from "@/lib/supabaseClient";
 import { MAX_PLAYERS, parseNames, ROSTER_LOCKED_MESSAGE } from "@/lib/seeding";
+import { Toast, type ToastMessage } from "@/components/Toast";
 
 type Player = { id: string; name: string; seed: number | null };
-type Message = { text: string; error?: boolean };
 
 const SEEDS = Array.from({ length: MAX_PLAYERS }, (_, i) => i + 1);
 
@@ -20,7 +20,7 @@ export default function PlayersPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [bracketBuilt, setBracketBuilt] = useState(false);
   const [namesText, setNamesText] = useState("");
-  const [msg, setMsg] = useState<Message | null>(null);
+  const [msg, setMsg] = useState<ToastMessage | null>(null);
   const [busy, setBusy] = useState(false);
 
   const hasRoster = players.length > 0;
@@ -63,13 +63,6 @@ export default function PlayersPage() {
   useEffect(() => {
     void load();
   }, []);
-
-  // Success messages fade on their own; errors stay until tapped.
-  useEffect(() => {
-    if (!msg || msg.error) return;
-    const timer = setTimeout(() => setMsg(null), 4000);
-    return () => clearTimeout(timer);
-  }, [msg]);
 
   async function run(action: () => Promise<string>) {
     if (busy || !ensurePin()) return;
@@ -316,21 +309,7 @@ export default function PlayersPage() {
         </ul>
       </section>
 
-      {msg && (
-        <button
-          type="button"
-          role="status"
-          onClick={() => setMsg(null)}
-          className={`fixed inset-x-4 bottom-4 z-20 mx-auto max-w-md rounded-xl border px-4 py-3 text-left text-sm shadow-lg ${
-            msg.error
-              ? "border-red-500 bg-[color:var(--card)] text-red-500"
-              : "border-[color:var(--border)] bg-[color:var(--card)] text-[color:var(--foreground)]"
-          }`}
-        >
-          {msg.text}
-          {msg.error && <span className="ml-2 text-xs text-[color:var(--muted)]">(tap to dismiss)</span>}
-        </button>
-      )}
+      <Toast msg={msg} onClose={setMsg} />
     </main>
   );
 }

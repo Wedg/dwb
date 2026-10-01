@@ -41,17 +41,14 @@ If you pull a newer version of the app later, run `db/schema.sql` again the same
 
 What you just did: created the three tables (`events`, `players`, `matches`), turned on row-level security so the public anon key can only read (never write), and enabled real-time so we can wire up live spectator updates later.
 
-### 1.3 Create the first event row
+### 1.3 Create the first tournament
 
-The app always uses "the latest event by `created_at`", so you need exactly one event row to exist before any of the pages will load data.
+The app always uses the newest tournament (a row in `events`), so one has to exist before the pages show anything. The easiest way is from the app once it's deployed: **TD Control → Tournament → Create tournament** (step 1 of Part 3).
 
-1. Still in SQL Editor, run:
-   ```sql
-   insert into public.events (name) values ('Spring Champs 2026');
-   ```
-2. You should see "Success. 1 row affected".
-
-Sanity check: left sidebar → **Table Editor** → click `events`. You should see one row.
+If you'd rather do it now in the SQL Editor:
+```sql
+insert into public.events (name) values ('Spring Champs 2026');
+```
 
 ### 1.4 Capture the keys
 
@@ -135,11 +132,13 @@ Open the production URL in your browser. The first time you do anything admin, t
 
 Walk through:
 
+0. **TD Control** → if it says *No tournament yet*, check the name and click **Create tournament**.
 1. **Players** page → paste 16 names (one per line) and click **Add 16 players**, then **Randomise seeds**. Try the ↑/↓ arrows to check swapping works.
 2. **TD Control** → click **Build singles bracket**.
 3. **Matches** page → confirm 8 R1 matches appear under "DwB Spring Champs".
-4. Set winners on a couple of R1 matches → check they appear in the corresponding QF.
-5. **TD Control** → use **Reset: Delete all matches** to undo and try again from scratch if you want.
+4. Tap the winner's name on a couple of R1 matches → check they appear in the corresponding QF.
+5. **TD Control** → use **Reset bracket (keep players)** to undo and try again from scratch if you want.
+6. When testing is done and you're ready for the real thing: **TD Control** → **Start new tournament** (the same name is fine, and you can tick *Copy players*), then **Delete** the test run under *Past tournaments*.
 
 If anything goes wrong, copy the exact error message and paste it here.
 
@@ -155,7 +154,7 @@ To prevent it happening again, we can add a small GitHub Actions workflow that r
 
 ## Troubleshooting
 
-**"No event found" on every page** → You skipped step 1.3. Run the `insert into public.events ...` SQL.
+**"No event found" on every page** → No tournament exists yet. Go to **TD Control** and click **Create tournament** (or run the SQL in step 1.3).
 
 **"Forbidden: bad admin PIN" when clicking buttons** → The PIN you typed in the browser doesn't match `ADMIN_PIN` in Vercel env vars. To reset: open browser DevTools → Application → Local Storage → delete `dwb_admin_pin`, refresh, retype.
 
