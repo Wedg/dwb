@@ -1,16 +1,21 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { requireAdminPin } from '@/lib/adminAuth';
+import { planAddPlayers, RosterError } from '@/lib/seeding';
 
+// Body: { names: string[] } to add several at once, or { name, seed? } for one.
+// Players without a seed take the lowest free seeds, in the order given.
 export async function POST(req: Request) {
   try {
     requireAdminPin(req);
-    const { name, seed } = await req.json() as { name: string; seed: number };
+    const body = await req.json() as { name?: unknown; seed?: unknown; names?: unknown };
 
-    if (!name || typeof name !== 'string') return NextResponse.json({ error: 'Name required' }, { status: 400 });
-    if (!Number.isInteger(seed) || seed < 1 || seed > 16) {
-      return NextResponse.json({ error: 'Seed must be an integer 1..16' }, { status: 400 });
-    }
+    const entries = Array.isArray(body.names)
+      ? body.names.map((name) => ({ name: typeof name === 'string' ? name : '' }))
+      : [{
+          name: typeof body.name === 'string' ? body.name : '',
+          seed: body.seed == null || body.seed === '' ? undefined : Number(body.seed),
+        }];
 
     // latest event
     const { data: ev, error: evErr } = await supabaseAdmin
@@ -19,20 +24,19 @@ export async function POST(req: Request) {
     if (!ev) return NextResponse.json({ error: 'No event found' }, { status: 400 });
     const eventId = ev.id as string;
 
-    // enforce max 16 and unique seed
-    const [{ data: all }, { data: sameSeed }] = await Promise.all([
-      supabaseAdmin.from('players').select('id').eq('event_id', eventId),
-      supabaseAdmin.from('players').select('id').eq('event_id', eventId).eq('seed', seed),
-    ]);
-    if ((all?.length ?? 0) >= 16) return NextResponse.json({ error: 'Already have 16 players' }, { status: 400 });
-    if ((sameSeed?.length ?? 0) > 0) return NextResponse.json({ error: `Seed ${seed} already taken` }, { status: 400 });
+    const { data: existing, error: pErr } = await supabaseAdmin
+      .from('players').select('name,seed').eq('event_id', eventId);
+    if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 });
 
-    const { error: insErr } = await supabaseAdmin.from('players').insert([{ event_id: eventId, name, seed }]);
+    // One insert for the whole batch, so it all lands or none of it does.
+    const rows = planAddPlayers(existing ?? [], entries).map((row) => ({ ...row, event_id: eventId }));
+    const { error: insErr } = await supabaseAdmin.from('players').insert(rows);
     if (insErr) return NextResponse.json({ error: insErr.message }, { status: 400 });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, added: rows.length });
   } catch (error: unknown) {
     if (error instanceof Response) return error;
+    if (error instanceof RosterError) return NextResponse.json({ error: error.message }, { status: 400 });
     const message = error instanceof Error ? error.message : 'Server error';
     return NextResponse.json({ error: message }, { status: 500 });
   }

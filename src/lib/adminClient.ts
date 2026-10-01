@@ -9,8 +9,19 @@ export async function adminFetch<T = unknown>(url: string, body: unknown): Promi
     body: JSON.stringify(body),
   });
   if (!res.ok) {
+    if (res.status === 403) {
+      // Forget a mistyped PIN so the next action prompts for it again.
+      localStorage.removeItem("dwb_admin_pin");
+      throw new Error("Wrong admin PIN. Try again and you'll be asked for it.");
+    }
     const txt = await res.text();
-    throw new Error(txt || `HTTP ${res.status}`);
+    let message = txt;
+    try {
+      message = (JSON.parse(txt) as { error?: string }).error ?? txt;
+    } catch {
+      // not JSON; show the body as-is
+    }
+    throw new Error(message || `HTTP ${res.status}`);
   }
   if (res.status === 204) {
     return undefined as T;

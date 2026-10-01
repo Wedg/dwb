@@ -9,7 +9,7 @@ Project notes for Claude Code working in this repo. Read `README.md` first for t
 - **Next.js 15 (App Router)** + **React 19** + **TypeScript** + **Tailwind v4**.
 - **Supabase** for storage (3 tables: `events`, `players`, `matches`). Anonymous key for public reads, service-role key for server-side writes.
 - All pages are `"use client"` and read directly from Supabase. Mutations always go through `/src/app/api/admin/*` server routes, which gate on `x-admin-pin`.
-- Tests: **none**. Linting: ESLint (build is configured to ignore lint errors via `next.config.ts`).
+- Tests: **vitest** for the pure modules in `src/lib` (`npm test`). Linting: ESLint (build is configured to ignore lint errors via `next.config.ts`).
 
 ```
 src/
@@ -26,7 +26,7 @@ src/
       set-winner/               set winner; auto-place into feeds_winner_to / feeds_loser_to
       clear-result/             clear winner; pull team back from downstream slots
       reset/                    matches_only | regen_r1
-      players/{add,update,delete}/
+      players/{add,update,delete,shuffle}/  add takes { names: [] } for bulk
   lib/
     supabaseClient.ts           browser (anon)
     supabaseAdmin.ts            server (service role)
@@ -34,6 +34,8 @@ src/
     adminClient.ts              ensurePin() + adminFetch() — localStorage `dwb_admin_pin`
     bracket.ts                  pure bracket logic (canonicalPairs, planPlaceTeam, …)
     bracket.test.ts             vitest tests for bracket.ts
+    seeding.ts                  pure roster/seed logic (bulk add, swap, shuffle)
+    seeding.test.ts             vitest tests for seeding.ts
 db/
   schema.sql                    tables + RLS policies + realtime publication
 docs/
@@ -42,7 +44,8 @@ docs/
 
 ## Data model invariants
 - Always exactly **one current event**. The "latest event" is `events` ordered by `created_at desc limit 1`. Anything that creates an extra event row will silently switch the app to it — there is no event picker UI.
-- **Players**: exactly 16 per event, with unique `seed` 1..16. The singles builder errors out otherwise.
+- **Players**: exactly 16 per event, with unique `seed` 1..16. The singles builder errors out otherwise. Uniqueness is the `players_event_seed_key` constraint, which is `DEFERRABLE` (checked at end of statement), so **any seed change that touches more than one player must be a single statement**: the routes send one `upsert` of full rows. Two separate updates always fail with a duplicate key error; that was the old swap bug. Seeding logic (bulk add, swap, shuffle) lives in `src/lib/seeding.ts`.
+- **Roster lock**: once any match exists for the event, `players/update` (seed), `players/shuffle` and `players/delete` refuse with 409, because R1 holds player ids. Renames are always allowed; renaming is how to swap in a substitute.
 - **Matches**: rows are flat. `bracket ∈ {MAIN, LOWER, DOUBLES}`, `stage ∈ {R1, QF, SF, F}`. `team_a` / `team_b` are `text[]` of player IDs (length 1 for singles, 2 for doubles, `[]` for TBD).
 - **Bracket wiring** lives on each match: `feeds_winner_to` / `feeds_loser_to` point at the next match's `id`. There is no separate edges table.
 - **Canonical R1 seed pairs** (hard-coded in two routes — keep in sync): `[1,16],[8,9],[5,12],[4,13],[3,14],[6,11],[7,10],[2,15]`.
@@ -51,7 +54,7 @@ docs/
 
 ## Admin auth model (important + thin)
 - Single shared PIN in `ADMIN_PIN` env var. Header `x-admin-pin` checked by `requireAdminPin()` (`src/lib/adminAuth.ts`). String equality.
-- The browser caches the PIN in `localStorage` under `dwb_admin_pin` after the first prompt. There's no logout, no expiry, no rate limiting, no audit log. Treat as "shared secret good enough for one weekend".
+- The browser caches the PIN in `localStorage` under `dwb_admin_pin` after the first prompt; a 403 clears it so the next action re-prompts. There's no logout, no expiry, no rate limiting, no audit log. Treat as "shared secret good enough for one weekend".
 
 ## Local dev
 ```
