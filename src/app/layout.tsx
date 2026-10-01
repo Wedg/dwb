@@ -1,87 +1,63 @@
-import Link from "next/link";
-import type { Metadata } from "next";
-import { Geist, Geist_Mono, Inter } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
+import { SiteFooter, SiteNav } from "@/components/SiteChrome";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+// Absolute URLs for the link-preview image. Same fallback as the home page QR
+// code; a malformed NEXT_PUBLIC_SITE_URL (say, missing https://) must not break the build.
+const FALLBACK_URL = "https://dwb-theta.vercel.app";
+function siteUrl(): URL {
+  try {
+    return new URL(process.env.NEXT_PUBLIC_SITE_URL || FALLBACK_URL);
+  } catch {
+    return new URL(FALLBACK_URL);
+  }
+}
 
-const inter = Inter({ subsets: ["latin"] });
-
+// The icons are files in this folder (icon.svg, favicon.ico, apple-icon.png);
+// Next adds their tags. The link-preview image is public/og-image.png.
 export const metadata: Metadata = {
-  title: 'Dinner with the Bishop',
-  description: 'Tournament hub',
+  metadataBase: siteUrl(),
+  title: { default: "Dinner with the Bishop", template: "%s · Dinner with the Bishop" },
+  description: "Live brackets and results for the Dinner with the Bishop chess tournament.",
+  applicationName: "Dinner with the Bishop",
+  appleWebApp: { title: "DwB" },
+  openGraph: {
+    type: "website",
+    siteName: "Dinner with the Bishop",
+    title: "Dinner with the Bishop",
+    description: "Live brackets and results, on your phone.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Dinner with the Bishop: live brackets and results, on your phone",
+      },
+    ],
+  },
+  twitter: { card: "summary_large_image" },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} ${inter.className} bg-[var(--background)] text-[var(--foreground)] antialiased`}
-      >
+    <html lang="en" className={inter.variable}>
+      <body className="bg-[var(--background)] font-sans text-[var(--foreground)] antialiased">
         <div className="flex min-h-screen flex-col">
-          <header className="border-b border-[color:var(--border)] bg-[color:var(--background)]/90 backdrop-blur">
-            <nav className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-4 text-sm font-medium sm:px-6 lg:px-8">
-              <Link
-                href="/"
-                className="rounded-full border border-transparent px-3 py-1 text-[color:var(--foreground)] transition hover:border-[color:var(--border)] hover:bg-[color:var(--highlight)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-              >
-                DwB Home
-              </Link>
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                <Link
-                  href="/control"
-                  className="rounded-full px-3 py-1 text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] hover:text-[color:var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                >
-                  TD Control
-                </Link>
-                <Link
-                  href="/players"
-                  className="rounded-full px-3 py-1 text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] hover:text-[color:var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                >
-                  Players
-                </Link>
-                <Link
-                  href="/matches"
-                  className="rounded-full px-3 py-1 text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] hover:text-[color:var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                >
-                  Matches
-                </Link>
-                <Link
-                  href="/brackets"
-                  className="rounded-full px-3 py-1 text-[color:var(--muted)] transition hover:bg-[color:var(--highlight)] hover:text-[color:var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)]"
-                >
-                  Brackets
-                </Link>
-              </div>
-            </nav>
-          </header>
+          <SiteNav />
           <div className="flex-1">{children}</div>
+          <SiteFooter />
         </div>
       </body>
     </html>
   );
 }
-
-// export default function RootLayout({
-//   children,
-// }: Readonly<{
-//   children: React.ReactNode;
-// }>) {
-//   return (
-//     <html lang="en">
-//       <body
-//         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-//       >
-//         {children}
-//       </body>
-//     </html>
-//   );
-// }

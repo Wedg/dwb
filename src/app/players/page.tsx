@@ -140,7 +140,7 @@ export default function PlayersPage() {
         </span>
         <h1 className="text-balance text-3xl font-semibold sm:text-4xl">Players</h1>
         <p className="text-pretty text-sm text-[color:var(--muted)] sm:text-base">
-          Curate the singles roster and seeds. All updates sync instantly to the public brackets and matches views.
+          Curate the singles roster and seeds. Changes reach the public pages within 30 seconds.
         </p>
       </header>
 

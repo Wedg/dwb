@@ -14,10 +14,12 @@ Project notes for Claude Code working in this repo. Read `README.md` first for t
 ```
 src/
   app/
-    page.tsx                    home + QR
-    layout.tsx                  global nav
-    brackets/page.tsx           public bracket grid (tabs: MAIN/LOWER/DOUBLES)
-    matches/page.tsx            stage-by-stage list; tap a name to set the winner, clear result
+    page.tsx                    home: follow card, champions, "how the evening works", QR
+    layout.tsx                  nav + footer (SiteChrome), metadata, link-preview tags
+    {brackets,matches,players,control}/layout.tsx  per-page <title> (the pages are client components)
+    icon.svg, favicon.ico, apple-icon.png, manifest.ts  bishop icons (Next adds the tags)
+    brackets/page.tsx           public brackets: trophy tabs; phones get round buttons, wider screens the tree
+    matches/page.tsx            every match by round; read-only unless TD mode (tap a name to set the winner)
     players/page.tsx            roster + seed up/down + delete
     control/page.tsx            TD dashboard: tournaments (new/rename/delete past) + builders + reset
     api/admin/
@@ -38,8 +40,16 @@ src/
     seeding.ts                  pure roster/seed logic (bulk add, swap, shuffle)
     seeding.test.ts             vitest tests for seeding.ts
     events.ts (+ .test.ts)      tournament name helpers
+    tournament.ts (+ .test.ts)  pure display logic: match states, "Winner of X v Y", current round, champions, follow-a-player
+    useTournament.ts            useTournament() (loads + auto-refreshes), useFollowedPlayer()
   components/
+    MatchCard.tsx               one match: winner ✓, loser greyed, Up next, waiting-for text, followed ★
+    FollowPlayer.tsx            "Playing tonight?" picker + status card
+    SiteChrome.tsx              nav (TD links only in TD mode) + footer TD sign in/out
+    ChampionBanner.tsx, LastUpdated.tsx, icons.tsx (BISHOP_PATH), bracketTheme.ts
     Toast.tsx                   bottom-of-screen message used by the admin pages
+public/
+  og-image.png                  link preview (1200x630); icon-192/512.png for the manifest
 db/
   schema.sql                    tables + RLS policies + realtime publication
 docs/
@@ -61,7 +71,8 @@ docs/
 
 ## Admin auth model (important + thin)
 - Single shared PIN in `ADMIN_PIN` env var. Header `x-admin-pin` checked by `requireAdminPin()` (`src/lib/adminAuth.ts`). String equality.
-- The browser caches the PIN in `localStorage` under `dwb_admin_pin` after the first prompt; a 403 clears it so the next action re-prompts. There's no logout, no expiry, no rate limiting, no audit log. Treat as "shared secret good enough for one weekend".
+- The browser caches the PIN in `localStorage` under `dwb_admin_pin` after the first prompt; a 403 clears it so the next action re-prompts. No expiry, no rate limiting, no audit log. Treat as "shared secret good enough for one weekend".
+- **TD mode** = that PIN is stored on this device (`useAdminMode()` in `adminClient.ts`). It only changes the UI: the nav shows Players/TD and Matches becomes tappable. Spectators get read-only pages. The footer has *Sign in* (prompts for the PIN) and *Sign out*. The server still checks the PIN on every action.
 
 ## Local dev
 ```
@@ -86,7 +97,10 @@ A bunch of these were patched in PRs #7–17 (see `git log`); they're worth know
 - The propagation logic in `set-winner`, `build-singles`, and `clear-result` is non-trivial — it has to handle re-corrections (changing a winner after downstream slots are populated). If you change one, look at the others.
 - "Latest event" is implicit. Starting a new tournament (or inserting an `events` row in Supabase) mid-tournament instantly hides the existing players/matches from the UI. They're still there, and deleting the new event brings them back.
 - `next.config.ts` sets `eslint.ignoreDuringBuilds: true` — lint errors will not fail a Vercel deploy.
-- Tournament UI loads on mount only — no Supabase realtime subscription. Spectators must refresh to see new winners.
+- Public pages (Home, Brackets, Matches) load through `useTournament()`, which re-fetches every 30 s while the page is visible and on focus/visibility change, keeping the last good data if a fetch fails. There's no realtime subscription. Admin pages (Players, Control) still load on mount.
+- Follow-a-player is per device: `localStorage` key `dwb_follow_player` holds a player id; ids from an older tournament are ignored.
+- `globals.css` element rules must stay inside `@layer base`. Unlayered rules beat Tailwind utilities, so the old `a { color: inherit }` silently overrode every text colour class on links.
+- The icon PNGs/ICO and `public/og-image.png` are rendered from `BISHOP_PATH` (`src/components/icons.tsx`). If the bishop changes, regenerate them all.
 - README path citations (`【F:...】`) reference some pre-rename paths (e.g. `src/app/players/add/route.ts` instead of `src/app/api/admin/players/add/route.ts`). The architecture description is still accurate.
 
 ## When making changes

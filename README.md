@@ -5,9 +5,12 @@ A Next.js application that keeps the entire "Dinner with the Bishop" community i
 ## What you can do with this app
 
 ### Public views
-- **Home hub** – Landing page that links out to every area of the tournament site and exposes a shareable QR code so players can pull the bracket up on their phones in a tap.【F:src/app/page.tsx†L7-L56】
-- **Brackets** – Interactive grid that renders Main, Lower, and Doubles draws directly from Supabase so spectators always see the live layout of each stage.【F:src/app/brackets/page.tsx†L7-L120】
-- **Matches** – Stage-by-stage list of every match with player names populated from Supabase; TDs can quickly set winners and automatically propagate teams through the bracket.【F:src/app/matches/page.tsx†L8-L200】
+- **Home hub** – The tournament name, a big way into the brackets, the champions once finals are decided, a three-step "how the evening works", and a QR code to share at the venue.
+- **Brackets** – One tab per trophy. On phones you step through the rounds (opening on the round being played); on bigger screens you get the whole tree. Finished brackets show their champion. Empty slots say who they're waiting for ("Winner of Tom v Grant").
+- **Follow a player** – Pick your name once and the site remembers it on that phone: a card shows the next match ("Up next: Quarterfinal v Sarah"), and that player's matches are starred everywhere.
+- **Matches** – Every match round by round. Read-only for spectators; on the TD's phone (TD mode) you tap the winner's name to record results.
+- **Always fresh** – Public pages update every 30 seconds and whenever you come back to them, with "Updated just now" and a Refresh button.
+- **Looks right when shared** – Bishop icon for the browser tab and home screen, and a preview card when the link is posted in WhatsApp or iMessage.
 
 ### Admin tools
 - **Player management** – Paste the 16 singles competitors in one go, randomise or hand-adjust the seeds, rename, or remove players, all behind the admin PIN. The roster locks once the bracket is built (renames still allowed, for substitutes). See `src/app/players/page.tsx`, `src/app/api/admin/players/*`, and the pure logic in `src/lib/seeding.ts`.

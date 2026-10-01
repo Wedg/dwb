@@ -1,288 +1,212 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
-import { drawOrder } from "@/lib/bracket";
+import { useCallback, useMemo, useState } from "react";
+import type { Bracket, Stage } from "@/lib/bracket";
+import { useFollowedPlayer, useTournament } from "@/lib/useTournament";
+import {
+  BRACKET_BLURB,
+  BRACKET_ORDER,
+  BRACKET_SHORT,
+  BRACKET_TITLES,
+  STAGE_LABEL,
+  STAGE_ORDER,
+  STAGE_SINGULAR,
+  buildView,
+  champion,
+  currentRound,
+  matchState,
+  sideViews,
+  teamName,
+  type ViewMatch,
+} from "@/lib/tournament";
+import { BRACKET_THEMES } from "@/components/bracketTheme";
+import { ChampionBanner } from "@/components/ChampionBanner";
+import { FollowPlayer } from "@/components/FollowPlayer";
+import { LastUpdated } from "@/components/LastUpdated";
+import { MatchCard } from "@/components/MatchCard";
+import { TrophyIcon } from "@/components/icons";
 
-type Bracket = "MAIN" | "LOWER" | "DOUBLES";
-type Stage = "R1" | "QF" | "SF" | "F";
+/** Round buttons on phones; short enough for all four to fit on one line. */
+const ROUND_BUTTON: Record<Stage, string> = { R1: "Round 1", QF: "Quarters", SF: "Semis", F: "Final" };
 
-type MatchRow = {
-  id: string;
-  event_id: string;
-  bracket: Bracket;
-  stage: Stage;
-  round_num: number;
-  team_a: string[];
-  team_b: string[];
-  winner: "A" | "B" | null;
-  feeds_winner_to: string | null;
-  feeds_loser_to: string | null;
+const NOT_DRAWN: Record<Bracket, string> = {
+  MAIN: "The draw hasn't been made yet. Check back soon.",
+  LOWER: "The Pudel König fills up as Round 1 is played.",
+  DOUBLES: "The doubles are drawn once all eight quarterfinals are finished.",
 };
-
-type Player = { id: string; name: string; seed: number | null };
-
-const BRACKET_TITLES: Record<Bracket, string> = {
-  MAIN: "DwB Spring Champs",
-  LOWER: "Pudel König",
-  DOUBLES: "Anthony Prangley Twin Bishops and Bar Bill",
-};
-
-const BRACKET_THEMES: Record<
-  Bracket,
-  { border: string; glow: string; header: string; label: string }
-> = {
-  MAIN: {
-    border: "rgba(129, 140, 248, 0.45)",
-    glow: "rgba(99, 102, 241, 0.25)",
-    header: "linear-gradient(90deg, rgba(129, 140, 248, 0.18), transparent)",
-    label: "text-violet-500",
-  },
-  LOWER: {
-    border: "rgba(45, 212, 191, 0.45)",
-    glow: "rgba(20, 184, 166, 0.22)",
-    header: "linear-gradient(90deg, rgba(45, 212, 191, 0.18), transparent)",
-    label: "text-teal-500",
-  },
-  DOUBLES: {
-    border: "rgba(251, 191, 36, 0.55)",
-    glow: "rgba(251, 146, 60, 0.26)",
-    header: "linear-gradient(90deg, rgba(251, 191, 36, 0.2), transparent)",
-    label: "text-amber-500",
-  },
-};
-
-const STAGE_ORDER: Stage[] = ["R1", "QF", "SF", "F"];
-const STAGE_LABEL: Record<Stage, string> = {
-  R1: "Round 1",
-  QF: "Quarterfinals",
-  SF: "Semifinals",
-  F: "Final",
-};
-
-async function getCurrentEvent(): Promise<{ id: string; name: string | null } | null> {
-  const { data, error } = await supabase
-    .from("events")
-    .select("id,name")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
-  if (error) return null;
-  return data ?? null;
-}
 
 export default function BracketsPage() {
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [matches, setMatches] = useState<MatchRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
+  const { event, players, matches, loading, error, stale, updatedAt, refresh } = useTournament();
+  const [followed, follow] = useFollowedPlayer(players);
   const [tab, setTab] = useState<Bracket>("MAIN");
-  const [eventName, setEventName] = useState<string | null>(null);
+  // Rounds picked by hand on a phone. Until then, show the round being played.
+  const [picked, setPicked] = useState<Partial<Record<Bracket, Stage>>>({});
 
-  const nameById = useMemo(() => {
-    const map = new Map<string, string>();
-    players.forEach((player) => map.set(player.id, player.name));
-    return map;
-  }, [players]);
+  const nameById = useMemo(() => new Map(players.map((player) => [player.id, player.name])), [players]);
+  const nameOf = useCallback((id: string) => nameById.get(id) ?? "Unknown player", [nameById]);
+  const view = useMemo(() => {
+    const seeds = new Map(players.map((player) => [player.id, player.seed]));
+    return buildView(matches, (id) => seeds.get(id));
+  }, [matches, players]);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      setErr(null);
-
-      const event = await getCurrentEvent();
-      if (!event) {
-        setErr("No event found.");
-        setLoading(false);
-        return;
-      }
-      const eventId = event.id;
-      setEventName(event.name);
-
-      const [playersResponse, matchesResponse] = await Promise.all([
-        supabase.from("players").select("id,name,seed").eq("event_id", eventId),
-        supabase
-          .from("matches")
-          .select("id,event_id,bracket,stage,round_num,team_a,team_b,winner,feeds_winner_to,feeds_loser_to")
-          .eq("event_id", eventId),
-      ]);
-
-      if (playersResponse.error) {
-        setErr(playersResponse.error.message);
-        setLoading(false);
-        return;
-      }
-      if (matchesResponse.error) {
-        setErr(matchesResponse.error.message);
-        setLoading(false);
-        return;
-      }
-
-      setPlayers(playersResponse.data ?? []);
-      setMatches(matchesResponse.data ?? []);
-      setLoading(false);
-    })();
-  }, []);
-
-  function labelTeam(ids: string[]) {
-    if (!ids || ids.length === 0) return "—";
-    if (ids.length === 1) return nameById.get(ids[0]) ?? ids[0];
-    return ids.map((id) => nameById.get(id) ?? id).join(" + ");
-  }
-
-  const rounds = useMemo(() => {
-    // Draw order across all brackets (Pudel König QFs are fed from main R1),
-    // then keep this tab's matches. Each round lines up with the one before.
-    const seedById = new Map(players.map((player) => [player.id, player.seed]));
-    const rows = drawOrder(matches, (id) => seedById.get(id)).filter((match) => match.bracket === tab);
-    const stageMap = new Map<Stage, MatchRow[]>();
-    STAGE_ORDER.forEach((stage) => stageMap.set(stage, []));
-    rows.forEach((match) => stageMap.get(match.stage)!.push(match));
-
-    return STAGE_ORDER.map((stage) => ({ stage, matches: stageMap.get(stage)! })).filter(
-      (group) => group.matches.length > 0
-    );
-  }, [matches, players, tab]);
-
+  const rounds = STAGE_ORDER.map((stage) => ({
+    stage,
+    matches: view.ordered.filter((match) => match.bracket === tab && match.stage === stage),
+  })).filter((r) => r.matches.length > 0);
+  const pickedRound = picked[tab];
+  const round =
+    pickedRound && rounds.some((r) => r.stage === pickedRound)
+      ? pickedRound
+      : (currentRound(tab, matches) ?? rounds[0]?.stage);
+  const champ = champion(tab, matches);
   const theme = BRACKET_THEMES[tab];
 
+  const heading = (m: ViewMatch) =>
+    m.stage === "F" ? "Final" : `${m.stage === "R1" ? "Match" : STAGE_SINGULAR[m.stage]} ${view.number.get(m.id)}`;
+  const card = (m: ViewMatch) => (
+    <MatchCard
+      key={m.id}
+      sides={sideViews(m, view, nameOf, followed)}
+      ready={matchState(m) === "ready"}
+      heading={heading(m)}
+    />
+  );
+
   return (
-    <main className="relative mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-5xl flex-col gap-10 px-4 py-10 sm:px-6 lg:px-8">
+    <main className="relative mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-5xl flex-col gap-8 px-4 py-10 sm:px-6 lg:px-8">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_var(--surface-glow),_transparent_65%)]"
       />
 
       <header className="flex flex-col gap-3 text-center sm:gap-4">
-        <span className="self-center rounded-full border border-[color:var(--border)] bg-[color:var(--highlight)] px-4 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-[color:var(--accent)]">
-          {eventName ?? "Public view"}
-        </span>
+        {event?.name && (
+          <span className="self-center rounded-full border border-[color:var(--border)] bg-[color:var(--highlight)] px-4 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-[color:var(--accent)]">
+            {event.name}
+          </span>
+        )}
         <h1 className="text-balance text-3xl font-semibold sm:text-4xl">Brackets</h1>
         <p className="text-pretty text-sm text-[color:var(--muted)] sm:text-base">
-          Follow every round in real time. Tap a bracket to browse matches, then jump to Matches to update winners.
+          Follow every round as it&apos;s played.
         </p>
+        <LastUpdated updatedAt={updatedAt} stale={stale} onRefresh={refresh} />
       </header>
-
-      <nav className="flex flex-wrap items-center justify-center gap-3">
-        {(["MAIN", "LOWER", "DOUBLES"] as Bracket[]).map((bracket) => (
-          <button
-            key={bracket}
-            type="button"
-            onClick={() => setTab(bracket)}
-            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] ${
-              tab === bracket
-                ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-[color:var(--accent-contrast)] shadow"
-                : "border-[color:var(--border)] bg-[color:var(--card)] text-[color:var(--foreground)] hover:border-[color:var(--accent)]"
-            }`}
-          >
-            <span>{BRACKET_TITLES[bracket]}</span>
-          </button>
-        ))}
-      </nav>
 
       {loading && (
         <section className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center text-sm text-[color:var(--muted)] shadow-sm sm:p-8">
-          Loading latest brackets…
+          Loading the brackets…
         </section>
       )}
 
-      {!loading && err && (
-        <section className="rounded-3xl border border-red-500/40 bg-red-500/10 p-6 text-center text-sm font-medium text-red-500 shadow-sm sm:p-8">
-          {err}
+      {!loading && error && (
+        <section className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center text-sm text-[color:var(--muted)] shadow-sm sm:p-8">
+          {error}
         </section>
       )}
 
-      {!loading && !err && (
-        <section
-          style={{
-            borderColor: theme.border,
-            boxShadow:
-              "0 1px 2px rgba(15, 23, 42, 0.04), 0 18px 38px -24px " + theme.glow,
-          }}
-          className="rounded-3xl border bg-[color:var(--card)] p-0 shadow-sm"
-        >
-          <header
-            style={{ background: theme.header }}
-            className="flex flex-col gap-2 rounded-t-3xl border-b border-[color:var(--border)] px-6 py-6 sm:flex-row sm:items-center sm:justify-between"
+      {!loading && !error && (
+        <>
+          <FollowPlayer
+            players={players}
+            matches={matches}
+            view={view}
+            nameOf={nameOf}
+            followed={followed}
+            onFollow={follow}
+          />
+
+          <nav aria-label="Trophies" className="flex flex-wrap justify-center gap-1.5 sm:gap-2">
+            {BRACKET_ORDER.map((bracket) => (
+              <button
+                key={bracket}
+                type="button"
+                onClick={() => setTab(bracket)}
+                aria-pressed={tab === bracket}
+                className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-2 text-sm font-semibold transition sm:px-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] ${
+                  tab === bracket
+                    ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-[color:var(--accent-contrast)] shadow"
+                    : "border-[color:var(--border)] bg-[color:var(--card)] text-[color:var(--foreground)] hover:border-[color:var(--accent)]"
+                }`}
+              >
+                {/* Finished trophies get a cup; phones skip it to keep the tabs on one line. */}
+                {champion(bracket, matches) && <TrophyIcon className="hidden h-4 w-4 shrink-0 sm:block" />}
+                <span>{BRACKET_SHORT[bracket]}</span>
+              </button>
+            ))}
+          </nav>
+
+          <section
+            style={{
+              borderColor: theme.border,
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04), 0 18px 38px -24px " + theme.glow,
+            }}
+            className="rounded-3xl border bg-[color:var(--card)]"
           >
-            <div>
-              <h2 className="text-lg font-semibold text-[color:var(--foreground)]">{BRACKET_TITLES[tab]}</h2>
-              <p className="text-sm text-[color:var(--muted)]">
-                {tab === "DOUBLES"
-                  ? "Pairings created from singles results."
-                  : "Seeded singles bracket straight from the Players roster."}
-              </p>
-            </div>
-            <span
-              className={`text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)] ${theme.label}`}
+            <header
+              style={{ background: theme.header }}
+              className="rounded-t-3xl border-b border-[color:var(--border)] px-5 py-5 sm:px-6"
             >
-              {rounds.length > 0 ? "Live view" : "Coming soon"}
-            </span>
-          </header>
+              <h2 className="text-lg font-semibold text-[color:var(--foreground)]">{BRACKET_TITLES[tab]}</h2>
+              <p className="text-sm text-[color:var(--muted)]">{BRACKET_BLURB[tab]}</p>
+            </header>
 
-          {rounds.length > 0 ? (
-            <div className="overflow-x-auto px-4 pb-6 pt-4 sm:px-6 lg:px-8">
-              <div className="grid grid-flow-col auto-cols-[minmax(220px,1fr)] gap-6">
-                {rounds.map((column) => (
-                  <div key={column.stage} className="flex flex-col gap-4">
-                    <h3 className="text-sm font-semibold uppercase tracking-[0.25em] text-[color:var(--muted)]">
-                      {STAGE_LABEL[column.stage]}
-                    </h3>
-                    {/* Spread each round evenly so a match sits level with the two that feed it. */}
-                    <div className="flex flex-1 flex-col justify-around gap-3">
-                      {column.matches.map((match) => (
-                        <article
-                          key={match.id}
-                          className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--background)]/90 p-4 shadow-inner backdrop-blur"
+            <div className="flex flex-col gap-5 p-4 sm:p-6">
+              {champ && (
+                <ChampionBanner
+                  winner={teamName(champ.winner, nameOf)}
+                  runnerUp={teamName(champ.runnerUp, nameOf)}
+                  pair={tab === "DOUBLES"}
+                />
+              )}
+
+              {rounds.length === 0 ? (
+                <p className="py-6 text-center text-sm text-[color:var(--muted)]">{NOT_DRAWN[tab]}</p>
+              ) : (
+                <>
+                  {/* Phones: one round at a time. */}
+                  <div className="md:hidden">
+                    <div role="tablist" aria-label="Rounds" className="flex gap-1.5 overflow-x-auto pb-1">
+                      {rounds.map((r) => (
+                        <button
+                          key={r.stage}
+                          type="button"
+                          role="tab"
+                          aria-selected={r.stage === round}
+                          onClick={() => setPicked((prev) => ({ ...prev, [tab]: r.stage }))}
+                          className={`shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] ${
+                            r.stage === round
+                              ? "border-[color:var(--accent)] bg-[color:var(--highlight)] text-[color:var(--foreground)]"
+                              : "border-[color:var(--border)] text-[color:var(--muted)]"
+                          }`}
                         >
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="font-mono text-xs text-[color:var(--muted)]">{match.id.slice(0, 8)}</p>
-                            {match.winner && (
-                              <span className="rounded-full border border-[color:var(--border)] bg-[color:var(--highlight)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--accent)]">
-                                Played
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-3 space-y-2">
-                            {(["A", "B"] as const).map((side) => {
-                              const isWinner = match.winner === side;
-                              const teamIds = side === "A" ? match.team_a : match.team_b;
-                              return (
-                                <div
-                                  key={side}
-                                  className={`rounded-xl border px-3 py-3 text-sm font-medium ${
-                                    isWinner
-                                      ? "border-[color:var(--accent)] text-[color:var(--foreground)]"
-                                      : "border-[color:var(--border)] text-[color:var(--foreground)]"
-                                  }`}
-                                >
-                                  <span className="block text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--muted)]">
-                                    {tab === "DOUBLES" ? `Team ${side}` : side}
-                                  </span>
-                                  <span className="text-pretty">{labelTeam(teamIds)}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </article>
+                          {ROUND_BUTTON[r.stage]}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      {rounds.find((r) => r.stage === round)?.matches.map(card)}
+                    </div>
+                  </div>
+
+                  {/* Wider screens: the whole tree, each match level with the two feeding it. */}
+                  <div className="hidden overflow-x-auto md:block">
+                    <div className="grid grid-flow-col auto-cols-[minmax(200px,1fr)] gap-5">
+                      {rounds.map((column) => (
+                        <div key={column.stage} className="flex flex-col gap-3">
+                          <h3 className="text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--muted)]">
+                            {STAGE_LABEL[column.stage]}
+                          </h3>
+                          <div className="flex flex-1 flex-col justify-around gap-3">{column.matches.map(card)}</div>
+                        </div>
                       ))}
                     </div>
                   </div>
-                ))}
-              </div>
+                </>
+              )}
             </div>
-          ) : (
-            <p className="px-6 py-10 text-center text-sm text-[color:var(--muted)]">
-              No matches have been generated yet.
-            </p>
-          )}
-        </section>
+          </section>
+        </>
       )}
-
-      <p className="text-center text-sm text-[color:var(--muted)]">
-        Use the <Link href="/matches" className="underline">Matches</Link> page to set winners; updates appear instantly here.
-      </p>
     </main>
   );
 }

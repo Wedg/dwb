@@ -128,7 +128,7 @@ Paste the production URL here in the chat and I'll update the hardcoded fallback
 
 ## Part 3 — Smoke test
 
-Open the production URL in your browser. The first time you do anything admin, the app will prompt for the PIN you set in 2.2 — it then caches it in your browser's localStorage.
+Open the production URL in your browser. Spectators only see Home, Brackets and Matches. To get the TD tools, scroll to the bottom of any page, tap **Sign in** next to "Tournament director?", and enter the PIN you set in 2.2. The browser remembers it, and **Players** and **TD** appear in the menu. A wrong PIN is forgotten the first time an action is refused.
 
 Walk through:
 
@@ -156,7 +156,7 @@ To prevent it happening again, we can add a small GitHub Actions workflow that r
 
 **"No event found" on every page** → No tournament exists yet. Go to **TD Control** and click **Create tournament** (or run the SQL in step 1.3).
 
-**"Forbidden: bad admin PIN" when clicking buttons** → The PIN you typed in the browser doesn't match `ADMIN_PIN` in Vercel env vars. To reset: open browser DevTools → Application → Local Storage → delete `dwb_admin_pin`, refresh, retype.
+**"Wrong admin PIN" when clicking buttons** → The PIN you typed doesn't match `ADMIN_PIN` in the Vercel env vars. The app forgets the wrong one straight away; tap **Sign in** at the bottom of the page and enter the right one.
 
 **Build fails immediately with `Error: supabaseUrl is required`** → All three Supabase env vars must be set *before* the first build, not just before runtime: `src/lib/supabaseAdmin.ts` calls `createClient()` at module load time, and Next.js imports every `api/admin/*` route during `next build` (the "Collecting page data" step) to prerender the rest of the app — so a missing/empty `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, or `SUPABASE_SERVICE_ROLE` fails the whole build, confirmed by reproducing it locally. Double-check all three are saved in Vercel's Environment Variables *before* triggering a deploy.
 

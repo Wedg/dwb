@@ -23,8 +23,8 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter), Arial, Helvetica, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -44,47 +44,27 @@
   }
 }
 
-/* --- Base styles --- */
-html, body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  min-height: 100%;
-}
+/* --- Base styles ---
+   In Tailwind's base layer so utility classes win over them; unlayered,
+   `a { color: inherit }` beat every text colour class on a link. */
+@layer base {
+  html, body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-inter), Arial, Helvetica, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100%;
+  }
 
-/* Links inherit color by default */
-a {
-  color: inherit;
-  text-decoration: none;
-}
+  /* Links inherit color by default */
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 
-/* Headings: give them stronger weight */
-h1, h2, h3, h4, h5, h6 {
-  font-weight: 600;
-}
-
-/* Optional: card + button helpers if you want to use plain CSS classes */
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-}
-
-.btn-primary {
-  background: var(--accent);
-  color: var(--accent-contrast);
-  border: 1px solid var(--accent);
-  border-radius: 0.5rem;
-  padding: 0.5rem 1rem;
-}
-
-.btn-outline {
-  background: transparent;
-  color: var(--foreground);
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 0.5rem 1rem;
+  /* Headings: give them stronger weight */
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+  }
 }
