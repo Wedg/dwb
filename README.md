@@ -10,7 +10,7 @@ A Next.js application that keeps the entire "Dinner with the Bishop" community i
 - **Matches** – Stage-by-stage list of every match with player names populated from Supabase; TDs can quickly set winners and automatically propagate teams through the bracket.【F:src/app/matches/page.tsx†L8-L200】
 
 ### Admin tools
-- **Player management** – Add, seed, update, or delete the 16 singles competitors for the current event with safeguards for duplicate seeds and PIN-protected access.【F:src/app/players/page.tsx†L8-L64】【F:src/app/players/add/route.ts†L5-L33】【F:src/app/api/admin/players/update/route.ts†L1-L33】
+- **Player management** – Paste the 16 singles competitors in one go, randomise or hand-adjust the seeds, rename, or remove players, all behind the admin PIN. The roster locks once the bracket is built (renames still allowed, for substitutes). See `src/app/players/page.tsx`, `src/app/api/admin/players/*`, and the pure logic in `src/lib/seeding.ts`.
 - **TD Control panel** – Dashboard that surfaces current bracket status, recommends the next action, and offers one-click builders for Singles, Doubles, and reset flows.【F:src/app/control/page.tsx†L26-L200】
 - **Automation APIs** – Server-side routes that create the entire singles bracket skeleton, spin up doubles from quarterfinal losers, clear results, or reset the tournament while enforcing the admin PIN.【F:src/app/api/admin/build-singles/route.ts†L18-L169】【F:src/app/api/admin/build-doubles/route.ts†L12-L98】【F:src/app/api/admin/clear-result/route.ts†L9-L52】【F:src/app/api/admin/reset/route.ts†L13-L76】
 
@@ -58,7 +58,7 @@ The UI expects exactly 16 seeded singles players and uses the match wiring logic
 
 ## Typical TD workflow
 1. **Create the event row** in Supabase (or reuse the latest event record).
-2. **Add 16 players with unique seeds** through the Players admin page; the app enforces max players and seed uniqueness.【F:src/app/players/page.tsx†L20-L63】【F:src/app/players/add/route.ts†L10-L29】
+2. **Add the 16 players** on the Players admin page by pasting a list (one name per line; new players take the lowest free seeds in order), then click **Randomise seeds** or adjust seeds by hand. The app enforces max players and seed uniqueness.
 3. **Open TD Control** and run the Singles builder to create Round 1 plus the downstream brackets.【F:src/app/control/page.tsx†L146-L200】【F:src/app/api/admin/build-singles/route.ts†L53-L167】
 4. **Record match winners** from the Matches page; results automatically advance teams to the next round or the Lower bracket.【F:src/app/matches/page.tsx†L133-L199】
 5. **Build Doubles** once all singles quarterfinals are complete—the API pairs QF losers into doubles semifinals and final.【F:src/app/control/page.tsx†L117-L180】【F:src/app/api/admin/build-doubles/route.ts†L32-L98】

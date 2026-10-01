@@ -37,6 +37,8 @@ Supabase's free tier *pauses* an inactive project first and only *deletes* it la
 5. Click **Run** (or press Ctrl-Enter / Cmd-Enter).
 6. You should see "Success. No rows returned" at the bottom.
 
+If you pull a newer version of the app later, run `db/schema.sql` again the same way. It only adds or upgrades what's missing and leaves your data alone.
+
 What you just did: created the three tables (`events`, `players`, `matches`), turned on row-level security so the public anon key can only read (never write), and enabled real-time so we can wire up live spectator updates later.
 
 ### 1.3 Create the first event row
@@ -133,7 +135,7 @@ Open the production URL in your browser. The first time you do anything admin, t
 
 Walk through:
 
-1. **Players** page → add 16 players with seeds 1–16.
+1. **Players** page → paste 16 names (one per line) and click **Add 16 players**, then **Randomise seeds**. Try the ↑/↓ arrows to check swapping works.
 2. **TD Control** → click **Build singles bracket**.
 3. **Matches** page → confirm 8 R1 matches appear under "DwB Spring Champs".
 4. Set winners on a couple of R1 matches → check they appear in the corresponding QF.

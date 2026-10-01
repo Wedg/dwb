@@ -22,8 +22,26 @@ create table if not exists public.players (
   created_at  timestamptz not null default timezone('utc', now())
 );
 
-create unique index if not exists players_event_seed_idx
-  on public.players (event_id, seed);
+-- Seeds are unique per event. The constraint is DEFERRABLE so Postgres
+-- checks it at the end of each statement instead of row by row, which is
+-- what lets one UPDATE swap or shuffle seeds. Installs from before this
+-- change have a plain unique index instead, which made every swap fail with
+-- "duplicate key value violates unique constraint players_event_seed_idx";
+-- re-running this file replaces it.
+drop index if exists public.players_event_seed_idx;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'players_event_seed_key'
+      and conrelid = 'public.players'::regclass
+  ) then
+    alter table public.players
+      add constraint players_event_seed_key unique (event_id, seed)
+      deferrable initially immediate;
+  end if;
+end $$;
 
 create table if not exists public.matches (
   id               uuid primary key default gen_random_uuid(),
