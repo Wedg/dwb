@@ -57,12 +57,12 @@ For a full guided walkthrough — new Supabase project → schema → Vercel env
 The UI expects exactly 16 seeded singles players and uses the match wiring logic in [`src/lib/bracket.ts`](./src/lib/bracket.ts) (called from the admin routes) to connect winners/losers across brackets.
 
 ## Typical TD workflow
-1. **Create the event row** in Supabase (or reuse the latest event record).
+1. **Start the tournament** from TD Control (name it, optionally copy last year's players). Older tournaments are kept under *Past tournaments* and can be deleted there, e.g. after a test run.
 2. **Add the 16 players** on the Players admin page by pasting a list (one name per line; new players take the lowest free seeds in order), then click **Randomise seeds** or adjust seeds by hand. The app enforces max players and seed uniqueness.
 3. **Open TD Control** and run the Singles builder to create Round 1 plus the downstream brackets.【F:src/app/control/page.tsx†L146-L200】【F:src/app/api/admin/build-singles/route.ts†L53-L167】
-4. **Record match winners** from the Matches page; results automatically advance teams to the next round or the Lower bracket.【F:src/app/matches/page.tsx†L133-L199】
-5. **Build Doubles** once all singles quarterfinals are complete—the API pairs QF losers into doubles semifinals and final.【F:src/app/control/page.tsx†L117-L180】【F:src/app/api/admin/build-doubles/route.ts†L32-L98】
-6. **Use reset tools** if you need to clear matches or rebuild Round 1 from seeds without touching the player list.【F:src/app/control/page.tsx†L183-L200】【F:src/app/api/admin/reset/route.ts†L28-L76】
+4. **Record match winners** from the Matches page by tapping the winner's name; results automatically advance teams to the next round or the Lower bracket.
+5. **Build Doubles** once all singles quarterfinals are complete. The eight QF losers are drawn into four random teams, two semifinals and a final. Press it again after correcting a QF result and only that player is swapped.
+6. **Reset bracket** if you need to start the draw again. It deletes every match and result but keeps the players, so you can re-seed and build again.
 
 ## Deployment notes
 - The production site can be hosted on Vercel (default Next.js target) or any platform that supports Next.js.

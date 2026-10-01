@@ -6,6 +6,7 @@ import {
   canonicalPairs,
   findCanonicalSlot,
   planPlaceTeam,
+  qfWiringOrder,
   r1SlotToQfIndex,
   type MatchSlots,
   type Team,
@@ -96,7 +97,7 @@ export async function POST(req: Request) {
 
     const { data: r1, error: r1FetchErr } = await supabaseAdmin
       .from('matches')
-      .select('id,team_a,team_b,stage,bracket,round_num')
+      .select('id,team_a,team_b,stage,bracket,round_num,feeds_winner_to,feeds_loser_to')
       .eq('event_id', eventId).eq('stage', 'R1').eq('bracket', 'MAIN');
     if (r1FetchErr) return NextResponse.json({ error: r1FetchErr.message }, { status: 400 });
     if (!r1 || r1.length !== 8) {
@@ -136,9 +137,9 @@ export async function POST(req: Request) {
       }
 
       const { data: qfAfter, error: qErr2 } = await supabaseAdmin
-        .from('matches').select('id').eq('event_id', eventId).eq('bracket', bracket).eq('stage', 'QF');
+        .from('matches').select('id,feeds_winner_to').eq('event_id', eventId).eq('bracket', bracket).eq('stage', 'QF');
       if (qErr2) throw new Error(qErr2.message);
-      return (qfAfter ?? []).map(d => d.id).sort();
+      return qfWiringOrder(qfAfter ?? []);
     }
 
     const qfMainIds  = await ensureSkeleton('MAIN');
@@ -152,8 +153,11 @@ export async function POST(req: Request) {
       seedById.set(bySeed.get(s)!, s);
     }
 
-    // Wire each R1 match: winners → main QF, losers → lower QF.
+    // Wire each R1 match: winners → main QF, losers → lower QF. Matches that
+    // are already wired keep their QFs, so pressing the button again can't
+    // re-route players who are already sitting in a QF.
     for (const m of r1) {
+      if (m.feeds_winner_to && m.feeds_loser_to) continue;
       const aId = (m.team_a?.[0]) ?? '';
       const bId = (m.team_b?.[0]) ?? '';
       const sa = seedById.get(aId)!;

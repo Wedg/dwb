@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ensurePin, adminFetch } from "@/lib/adminClient";
 import { supabase } from "@/lib/supabaseClient";
+import { suggestEventName } from "@/lib/events";
+import { Toast, type ToastMessage } from "@/components/Toast";
 
 type Status = {
   players: number;
@@ -18,6 +20,15 @@ type Status = {
   dSFWinners: number;
   dFinal: number;
   dFinalWinner: number;
+  results: number;
+};
+
+type EventSummary = {
+  id: string;
+  name: string;
+  createdAt: string;
+  players: number;
+  matches: number;
 };
 
 const INITIAL_STATUS: Status = {
@@ -33,21 +44,50 @@ const INITIAL_STATUS: Status = {
   dSFWinners: 0,
   dFinal: 0,
   dFinalWinner: 0,
+  results: 0,
 };
+
+const inputClassName =
+  "w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm text-[color:var(--foreground)] shadow-sm transition focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)] focus:ring-offset-2 focus:ring-offset-[color:var(--background)]";
+
+const smallButtonClassName =
+  "inline-flex h-9 items-center justify-center rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:cursor-not-allowed disabled:opacity-40";
+
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+
+const plural = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
 
 export default function ControlPage() {
   const [status, setStatus] = useState<Status>(INITIAL_STATUS);
+  const [events, setEvents] = useState<EventSummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [copyPlayers, setCopyPlayers] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<ToastMessage | null>(null);
+
+  const current = events[0] ?? null;
+  const past = events.slice(1);
 
   async function refreshStatus() {
     try {
-      const { data: ev } = await supabase
+      const { data: rows } = await supabase
         .from("events")
-        .select("id")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .select("id,name,created_at,players(count),matches(count)")
+        .order("created_at", { ascending: false });
+      const summaries: EventSummary[] = (rows ?? []).map((row) => ({
+        id: row.id,
+        name: row.name ?? "Untitled",
+        createdAt: row.created_at,
+        players: row.players?.[0]?.count ?? 0,
+        matches: row.matches?.[0]?.count ?? 0,
+      }));
+      setEvents(summaries);
+      setNewName((name) => name || suggestEventName(summaries[0]?.name, new Date().getFullYear()));
+      setLoaded(true);
+
+      const ev = summaries[0];
       if (!ev) {
         setStatus(INITIAL_STATUS);
         return;
@@ -67,6 +107,7 @@ export default function ControlPage() {
         dSFWins,
         dFinalAll,
         dFinalWins,
+        results,
       ] = await Promise.all([
         supabase.from("players").select("id").eq("event_id", eventId),
         supabase.from("matches").select("id").eq("event_id", eventId).eq("stage", "R1"),
@@ -129,6 +170,7 @@ export default function ControlPage() {
           .eq("bracket", "DOUBLES")
           .eq("stage", "F")
           .not("winner", "is", null),
+        supabase.from("matches").select("id").eq("event_id", eventId).not("winner", "is", null),
       ]);
 
       setStatus({
@@ -144,6 +186,7 @@ export default function ControlPage() {
         dSFWinners: dSFWins.data?.length ?? 0,
         dFinal: dFinalAll.data?.length ?? 0,
         dFinalWinner: dFinalWins.data?.length ?? 0,
+        results: results.data?.length ?? 0,
       });
     } catch {
       // non-fatal fetch error
@@ -155,31 +198,65 @@ export default function ControlPage() {
   }, []);
 
   function nextActionHint(s: Status): string {
-    if (s.players !== 16) return "Add and seed players (need exactly 16 with seeds 1..16).";
-    if (s.r1 < 8) return "Create Round 1 (use \"Reset: Start fresh (R1 only)\" or the Singles builder).";
-    if (s.r1Winners < 8) return `Set winners for Round 1 (${s.r1Winners}/8).`;
-    if (s.qfMain < 4 || s.qfLower < 4) return "Create 4 QFs per bracket (click the Singles builder).";
+    if (!current) return "Start a tournament in the Tournament section above.";
+    if (s.players !== 16) return `Add 16 players on the Players page (${s.players}/16), then randomise the seeds.`;
+    if (s.r1 < 8 || s.qfMain < 4 || s.qfLower < 4) return "Click \"Build singles bracket\".";
+    if (s.r1Winners < 8) return `Set winners for Round 1 on the Matches page (${s.r1Winners}/8).`;
     if (s.qfMainWinners + s.qfLowerWinners < 8)
       return `Set all 8 QF winners (${s.qfMainWinners + s.qfLowerWinners}/8). This enables Doubles.`;
-    if (s.dSF === 0) return "Build Doubles (from QF losers).";
+    if (s.dSF === 0) return "Click \"Build Doubles\" to draw the doubles teams.";
     if (s.dSFWinners < 2) return `Set Doubles SF winners (${s.dSFWinners}/2) to populate the Final.`;
     if (s.dFinal === 1 && s.dFinalWinner === 0) return "Set the Doubles Final winner to finish the event.";
     return "All good. Continue setting winners through to each Final.";
   }
 
-  async function action(fn: () => Promise<void>) {
+  async function action(fn: () => Promise<string>, confirmText?: string) {
+    if (confirmText && !confirm(confirmText)) return;
+    if (busy || !ensurePin()) return;
     setBusy(true);
-    setMsg(null);
     try {
-      if (!ensurePin()) return;
-      await fn();
-      await refreshStatus();
+      setMsg({ text: await fn() });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Action failed";
-      setMsg(message);
+      setMsg({ text: `Error: ${message}`, error: true });
     } finally {
+      await refreshStatus();
       setBusy(false);
     }
+  }
+
+  function startTournament() {
+    const name = newName.trim();
+    if (!name) return;
+    const keepNote = current
+      ? `\n\nThe current "${current.name}" (started ${formatDate(current.createdAt)}) moves to Past tournaments, where you can delete it.`
+      : "";
+    void action(async () => {
+      const res = await adminFetch<{ message?: string }>("/api/admin/events/create", {
+        name,
+        copyPlayers: copyPlayers && !!current,
+      });
+      setNewName("");
+      setCopyPlayers(false);
+      return res?.message ?? `Started "${name}".`;
+    }, `Start "${name}"?\n\nThe whole app switches to it straight away.${keepNote}`);
+  }
+
+  function renameTournament() {
+    if (!current) return;
+    const name = prompt("Rename tournament", current.name)?.trim();
+    if (!name || name === current.name) return;
+    void action(async () => {
+      const res = await adminFetch<{ message?: string }>("/api/admin/events/rename", { id: current.id, name });
+      return res?.message ?? "Renamed.";
+    });
+  }
+
+  function deleteTournament(ev: EventSummary) {
+    void action(async () => {
+      const res = await adminFetch<{ message?: string }>("/api/admin/events/delete", { id: ev.id });
+      return res?.message ?? "Deleted.";
+    }, `Permanently delete "${ev.name}" (started ${formatDate(ev.createdAt)}) with its ${plural(ev.players, "player")} and ${plural(ev.matches, "match", "matches")}?\n\nThis can't be undone.`);
   }
 
   return (
@@ -198,6 +275,104 @@ export default function ControlPage() {
           Quick actions to build brackets, manage doubles, and reset rounds. Designed for pin-protected tournament staff on the go.
         </p>
       </header>
+
+      <section className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm sm:p-8">
+        <h2 className="text-lg font-semibold">Tournament</h2>
+        {current ? (
+          <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--highlight)] p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="break-words text-xl font-semibold text-[color:var(--foreground)]">{current.name}</p>
+              <p className="text-sm text-[color:var(--muted)]">
+                Started {formatDate(current.createdAt)} · {plural(current.players, "player")} ·{" "}
+                {plural(current.matches, "match", "matches")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={renameTournament}
+              disabled={busy}
+              className={`${smallButtonClassName} self-start border-[color:var(--border)] text-[color:var(--muted)] hover:bg-[color:var(--background)] focus-visible:ring-[color:var(--accent)] sm:self-center`}
+            >
+              Rename
+            </button>
+          </div>
+        ) : (
+          loaded && (
+            <p className="mt-2 text-sm text-[color:var(--muted)]">No tournament yet. Start one below.</p>
+          )
+        )}
+
+        <form
+          className="mt-6 flex flex-col gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            startTournament();
+          }}
+        >
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="font-medium text-[color:var(--muted)]">
+              {current ? "Start a new tournament" : "Tournament name"}
+            </span>
+            <input
+              className={inputClassName}
+              value={newName}
+              maxLength={80}
+              onChange={(event) => setNewName(event.target.value)}
+              placeholder="Spring Champs 2027"
+            />
+          </label>
+          {current && current.players > 0 && (
+            <label className="flex items-center gap-2 text-sm text-[color:var(--muted)]">
+              <input
+                type="checkbox"
+                checked={copyPlayers}
+                onChange={(event) => setCopyPlayers(event.target.checked)}
+              />
+              Copy the {plural(current.players, "player")} from {current.name}
+            </label>
+          )}
+          <button
+            type="submit"
+            disabled={busy || !newName.trim()}
+            className="h-11 rounded-xl bg-[color:var(--accent)] px-4 text-sm font-semibold text-[color:var(--accent-contrast)] shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:cursor-not-allowed disabled:opacity-60 sm:self-start"
+          >
+            {current ? "Start new tournament" : "Create tournament"}
+          </button>
+          <p className="text-xs text-[color:var(--muted)]">
+            Everyone sees the newest tournament. The current one is kept under Past tournaments, so a test run can be
+            deleted there afterwards. Names don&apos;t have to be unique.
+          </p>
+        </form>
+
+        {past.length > 0 && (
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold uppercase tracking-[0.25em] text-[color:var(--muted)]">
+              Past tournaments
+            </h3>
+            <ul className="mt-3 divide-y divide-[color:var(--border)] rounded-2xl border border-[color:var(--border)]">
+              {past.map((ev) => (
+                <li key={ev.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="break-words font-medium text-[color:var(--foreground)]">{ev.name}</p>
+                    <p className="text-xs text-[color:var(--muted)]">
+                      Started {formatDate(ev.createdAt)} · {plural(ev.players, "player")} ·{" "}
+                      {plural(ev.matches, "match", "matches")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => deleteTournament(ev)}
+                    disabled={busy}
+                    className={`${smallButtonClassName} shrink-0 border-red-500 text-red-500 hover:bg-red-500/10 focus-visible:ring-red-500`}
+                  >
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
 
       <section className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm sm:p-8">
         <h2 className="text-lg font-semibold">Tournament status</h2>
@@ -276,46 +451,47 @@ export default function ControlPage() {
         <div className="mt-4 space-y-3 rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--background)]/70 p-4 text-sm text-[color:var(--muted)]">
           <p className="font-semibold text-[color:var(--foreground)]">Suggested flow</p>
           <ol className="list-decimal space-y-2 pl-4">
-            <li>Add and seed 16 players on the Players screen.</li>
+            <li>Start the tournament above (or carry on with the current one).</li>
+            <li>Add the 16 players on the Players screen and randomise the seeds.</li>
             <li>
-              Click <strong>Build singles bracket</strong> to create Round&nbsp;1 (if needed), generate all quarterfinal/semi/final
-              placeholders, and wire Round&nbsp;1 winners and losers into those slots.
+              Click <strong>Build singles bracket</strong>. This draws Round&nbsp;1 from the seeds and sets up every round after it.
+            </li>
+            <li>Record winners on the Matches page by tapping the winner&apos;s name. They move on automatically.</li>
+            <li>
+              Once all eight quarterfinals have winners, click <strong>Build Doubles</strong> to draw the doubles teams.
             </li>
             <li>
-              Record match winners on the Matches page. Once Round&nbsp;1 winners are set they will automatically populate the quarterfinals.
+              To start the draw again, use <strong>Reset bracket</strong>. Players are kept, so you can re-seed and build again.
             </li>
-            <li>
-              After all eight quarterfinals have winners, use <strong>Build doubles bracket</strong> to create the doubles draw from the singles losers.
-            </li>
-            <li>Use the reset options sparingly if you need to clear data or regenerate Round&nbsp;1.</li>
           </ol>
         </div>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !current}
             onClick={() =>
               action(async () => {
                 const res = await adminFetch<{ message?: string }>("/api/admin/build-singles", {});
-                setMsg(res?.message ?? "Singles bracket ensured and Round 1 wired into the QFs.");
+                return res?.message ?? "Singles bracket ensured and Round 1 wired into the QFs.";
               })
             }
             className="rounded-2xl border border-[color:var(--accent)] bg-[color:var(--accent)] px-4 py-3 text-sm font-semibold text-[color:var(--accent-contrast)] shadow transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {busy ? "Working…" : "Build singles bracket (create & wire R1 → QFs)"}
+            {busy ? "Working…" : "Build singles bracket"}
           </button>
           <p className="sm:col-span-2 text-sm text-[color:var(--muted)]">
-            Ensures Round&nbsp;1 exists using the seeded players, creates empty quarterfinal/semi/final matches in both the main and lower
-            brackets, and connects each Round&nbsp;1 match so winners feed into the main QFs and losers into the lower QFs.
+            Draws Round&nbsp;1 from the seeds, creates the quarterfinals, semis and final for both the main and Pudel König brackets,
+            and connects them: Round&nbsp;1 winners go to the main QFs, losers to the Pudel König QFs. Safe to press again; it only
+            fills in what&apos;s missing.
           </p>
 
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !current}
             onClick={() =>
               action(async () => {
                 const res = await adminFetch<{ message?: string }>("/api/admin/build-doubles", {});
-                setMsg(res?.message ?? "Doubles draw created from the eight singles QF losers.");
+                return res?.message ?? "Doubles drawn from the eight singles QF losers.";
               })
             }
             className="rounded-2xl border border-blue-900 bg-blue-900 px-4 py-3 text-sm font-semibold text-white shadow transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:cursor-not-allowed disabled:opacity-60"
@@ -323,50 +499,34 @@ export default function ControlPage() {
             {busy ? "Working…" : "Build Doubles (from QF losers)"}
           </button>
           <p className="sm:col-span-2 text-sm text-[color:var(--muted)]">
-            Creates two doubles semifinals and a final. Each doubles team is built from consecutive losers of the singles quarterfinals (1&2 vs 7&8 for balance).
+            Randomly pairs the eight quarterfinal losers into four teams and draws two semifinals and a final. If you correct a
+            quarterfinal result afterwards, press it again: the player who now lost that quarterfinal takes over, and everyone else
+            keeps their partner. Once doubles results are in, it won&apos;t change the draw.
           </p>
 
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !current}
             onClick={() =>
-              action(async () => {
-                const res = await adminFetch<{ message?: string }>("/api/admin/reset", { action: "matches_only" });
-                setMsg(res?.message ?? "All matches cleared. Player list remains untouched.");
-              })
+              action(
+                async () => {
+                  const res = await adminFetch<{ message?: string }>("/api/admin/reset", {});
+                  return res?.message ?? "Bracket reset. Players kept.";
+                },
+                status.results > 0
+                  ? `Reset the bracket?\n\nThis deletes all ${plural(current?.matches ?? 0, "match", "matches")}, including ${plural(status.results, "result")} already entered. Players are kept.`
+                  : "Reset the bracket?\n\nThis deletes every match. No results have been entered yet. Players are kept."
+              )
             }
             className="rounded-2xl border border-red-600 bg-transparent px-4 py-3 text-sm font-semibold text-red-600 shadow transition hover:bg-red-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {busy ? "Working…" : "Reset: Delete all matches"}
+            {busy ? "Working…" : "Reset bracket (keep players)"}
           </button>
           <p className="sm:col-span-2 text-sm text-[color:var(--muted)]">
-            Wipes every match (singles and doubles) for the current event. Use if you need to start bracket building again from scratch.
-          </p>
-
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              action(async () => {
-                const res = await adminFetch<{ message?: string }>("/api/admin/reset", { action: "regen_r1" });
-                setMsg(res?.message ?? "All matches cleared and Round 1 regenerated from the seeded players.");
-              })
-            }
-            className="rounded-2xl border border-[color:var(--accent)] bg-[color:var(--accent)] px-4 py-3 text-sm font-semibold text-[color:var(--accent-contrast)] shadow transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {busy ? "Working…" : "Reset: Clear matches & rebuild Round 1"}
-          </button>
-          <p className="sm:col-span-2 text-sm text-[color:var(--muted)]">
-            Deletes every match and immediately recreates the eight Round&nbsp;1 singles matches using the current 16 seeded players. Run
-            the singles builder afterwards to reconnect Round&nbsp;1 to the rest of the bracket.
+            Deletes every match and result, singles and doubles, in the current tournament. Players stay, and seeds can be changed
+            again. Then click <strong>Build singles bracket</strong> to draw a fresh bracket.
           </p>
         </div>
-
-        {msg && (
-          <p className="mt-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--highlight)] px-4 py-3 text-sm text-[color:var(--muted)]">
-            {msg}
-          </p>
-        )}
       </section>
 
       <p className="text-center text-sm text-[color:var(--muted)]">
@@ -374,6 +534,8 @@ export default function ControlPage() {
         <Link href="/matches" className="underline">Matches</Link> page. View the public tree on {" "}
         <Link href="/brackets" className="underline">Brackets</Link>.
       </p>
+
+      <Toast msg={msg} onClose={setMsg} />
     </main>
   );
 }

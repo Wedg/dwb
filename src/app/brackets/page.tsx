@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { drawOrder } from "@/lib/bracket";
 
 type Bracket = "MAIN" | "LOWER" | "DOUBLES";
 type Stage = "R1" | "QF" | "SF" | "F";
@@ -16,9 +17,11 @@ type MatchRow = {
   team_a: string[];
   team_b: string[];
   winner: "A" | "B" | null;
+  feeds_winner_to: string | null;
+  feeds_loser_to: string | null;
 };
 
-type Player = { id: string; name: string };
+type Player = { id: string; name: string; seed: number | null };
 
 const BRACKET_TITLES: Record<Bracket, string> = {
   MAIN: "DwB Spring Champs",
@@ -58,15 +61,15 @@ const STAGE_LABEL: Record<Stage, string> = {
   F: "Final",
 };
 
-async function getLatestEventId(): Promise<string | null> {
+async function getCurrentEvent(): Promise<{ id: string; name: string | null } | null> {
   const { data, error } = await supabase
     .from("events")
-    .select("id")
+    .select("id,name")
     .order("created_at", { ascending: false })
     .limit(1)
     .single();
   if (error) return null;
-  return data?.id ?? null;
+  return data ?? null;
 }
 
 export default function BracketsPage() {
@@ -75,6 +78,7 @@ export default function BracketsPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [tab, setTab] = useState<Bracket>("MAIN");
+  const [eventName, setEventName] = useState<string | null>(null);
 
   const nameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -87,18 +91,20 @@ export default function BracketsPage() {
       setLoading(true);
       setErr(null);
 
-      const eventId = await getLatestEventId();
-      if (!eventId) {
+      const event = await getCurrentEvent();
+      if (!event) {
         setErr("No event found.");
         setLoading(false);
         return;
       }
+      const eventId = event.id;
+      setEventName(event.name);
 
       const [playersResponse, matchesResponse] = await Promise.all([
-        supabase.from("players").select("id,name").eq("event_id", eventId),
+        supabase.from("players").select("id,name,seed").eq("event_id", eventId),
         supabase
           .from("matches")
-          .select("id,event_id,bracket,stage,round_num,team_a,team_b,winner")
+          .select("id,event_id,bracket,stage,round_num,team_a,team_b,winner,feeds_winner_to,feeds_loser_to")
           .eq("event_id", eventId),
       ]);
 
@@ -126,24 +132,18 @@ export default function BracketsPage() {
   }
 
   const rounds = useMemo(() => {
-    const rows = matches.filter((match) => match.bracket === tab);
+    // Draw order across all brackets (Pudel König QFs are fed from main R1),
+    // then keep this tab's matches. Each round lines up with the one before.
+    const seedById = new Map(players.map((player) => [player.id, player.seed]));
+    const rows = drawOrder(matches, (id) => seedById.get(id)).filter((match) => match.bracket === tab);
     const stageMap = new Map<Stage, MatchRow[]>();
     STAGE_ORDER.forEach((stage) => stageMap.set(stage, []));
     rows.forEach((match) => stageMap.get(match.stage)!.push(match));
 
-    STAGE_ORDER.forEach((stage) => {
-      const arr = stageMap.get(stage)!;
-      arr.sort((a, b) => {
-        const roundDelta = (a.round_num ?? 0) - (b.round_num ?? 0);
-        if (roundDelta !== 0) return roundDelta;
-        return a.id.localeCompare(b.id);
-      });
-    });
-
     return STAGE_ORDER.map((stage) => ({ stage, matches: stageMap.get(stage)! })).filter(
       (group) => group.matches.length > 0
     );
-  }, [matches, tab]);
+  }, [matches, players, tab]);
 
   const theme = BRACKET_THEMES[tab];
 
@@ -156,7 +156,7 @@ export default function BracketsPage() {
 
       <header className="flex flex-col gap-3 text-center sm:gap-4">
         <span className="self-center rounded-full border border-[color:var(--border)] bg-[color:var(--highlight)] px-4 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-[color:var(--accent)]">
-          Public view
+          {eventName ?? "Public view"}
         </span>
         <h1 className="text-balance text-3xl font-semibold sm:text-4xl">Brackets</h1>
         <p className="text-pretty text-sm text-[color:var(--muted)] sm:text-base">
@@ -225,11 +225,12 @@ export default function BracketsPage() {
             <div className="overflow-x-auto px-4 pb-6 pt-4 sm:px-6 lg:px-8">
               <div className="grid grid-flow-col auto-cols-[minmax(220px,1fr)] gap-6">
                 {rounds.map((column) => (
-                  <div key={column.stage} className="space-y-4">
+                  <div key={column.stage} className="flex flex-col gap-4">
                     <h3 className="text-sm font-semibold uppercase tracking-[0.25em] text-[color:var(--muted)]">
                       {STAGE_LABEL[column.stage]}
                     </h3>
-                    <div className="grid gap-3">
+                    {/* Spread each round evenly so a match sits level with the two that feed it. */}
+                    <div className="flex flex-1 flex-col justify-around gap-3">
                       {column.matches.map((match) => (
                         <article
                           key={match.id}
@@ -239,7 +240,7 @@ export default function BracketsPage() {
                             <p className="font-mono text-xs text-[color:var(--muted)]">{match.id.slice(0, 8)}</p>
                             {match.winner && (
                               <span className="rounded-full border border-[color:var(--border)] bg-[color:var(--highlight)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--accent)]">
-                                Winner · {match.winner}
+                                Played
                               </span>
                             )}
                           </div>

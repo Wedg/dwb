@@ -3,10 +3,23 @@
 import Link from "next/link";
 import { QRCodeCanvas } from "qrcode.react";
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function HomePage() {
   const [siteUrl, setSiteUrl] = useState("https://dwb-theta.vercel.app"); // fallback
   const [isDarkMode, setIsDarkMode] = useState(false);
+  // undefined while loading, null when there's no tournament yet
+  const [eventName, setEventName] = useState<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    void supabase
+      .from("events")
+      .select("name")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setEventName(data?.name ?? null));
+  }, []);
 
   useEffect(() => {
     // Prefer the live origin when client-side
@@ -51,7 +64,7 @@ export default function HomePage() {
           Dinner with the Bishop
         </span>
         <h1 className="text-balance text-4xl font-bold tracking-tight sm:text-5xl">
-          Tournament Hub
+          {eventName === undefined ? "\u00a0" : eventName ?? "Tournament Hub"}
         </h1>
         <p className="max-w-2xl text-balance text-lg text-[color:var(--muted)]">
           Welcome! Follow live brackets, browse match results, or manage player

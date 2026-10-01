@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { requireAdminPin } from '@/lib/adminAuth';
-import { planRemoveTeam, type MatchSlots, type Team } from '@/lib/bracket';
+import { planRemoveTeam, resultChangeProblem, type MatchSlots, type Team } from '@/lib/bracket';
 
 async function removeTeam(nextId: string | null, team: Team) {
   if (!nextId || team.length === 0) return;
@@ -35,9 +35,21 @@ export async function POST(req: Request) {
       .maybeSingle();
     if (error || !m) return NextResponse.json({ error: 'Match not found' }, { status: 400 });
 
+    const teamA: Team = Array.isArray(m.team_a) ? m.team_a : [];
+    const teamB: Team = Array.isArray(m.team_b) ? m.team_b : [];
+
+    const nextIds = [m.feeds_winner_to, m.feeds_loser_to].filter((id): id is string => !!id);
+    const { data: nextMatches, error: nErr } = await supabaseAdmin
+      .from('matches').select('winner').in('id', nextIds);
+    if (nErr) return NextResponse.json({ error: nErr.message }, { status: 500 });
+    const problem = resultChangeProblem(
+      { team_a: teamA, team_b: teamB, winner: m.winner ?? null },
+      null,
+      (nextMatches ?? []).some((n) => n.winner),
+    );
+    if (problem) return NextResponse.json({ error: problem }, { status: 409 });
+
     if (m.winner) {
-      const teamA: Team = Array.isArray(m.team_a) ? m.team_a : [];
-      const teamB: Team = Array.isArray(m.team_b) ? m.team_b : [];
       const winnerTeam = m.winner === 'A' ? teamA : teamB;
       const loserTeam  = m.winner === 'A' ? teamB : teamA;
 

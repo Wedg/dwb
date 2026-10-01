@@ -17,15 +17,16 @@ src/
     page.tsx                    home + QR
     layout.tsx                  global nav
     brackets/page.tsx           public bracket grid (tabs: MAIN/LOWER/DOUBLES)
-    matches/page.tsx            stage-by-stage list, set/clear winners
+    matches/page.tsx            stage-by-stage list; tap a name to set the winner, clear result
     players/page.tsx            roster + seed up/down + delete
-    control/page.tsx            TD dashboard + builders/resets
+    control/page.tsx            TD dashboard: tournaments (new/rename/delete past) + builders + reset
     api/admin/
       build-singles/            create+wire R1→QFs, ensure QF/SF/F skeleton
-      build-doubles/            create doubles SF/F from 8 QF losers
+      build-doubles/            random doubles draw from 8 QF losers; re-press patches it after QF corrections
       set-winner/               set winner; auto-place into feeds_winner_to / feeds_loser_to
       clear-result/             clear winner; pull team back from downstream slots
-      reset/                    matches_only | regen_r1
+      reset/                    delete all matches in the current tournament (players kept)
+      events/{create,rename,delete}/  tournaments; delete refuses the current one
       players/{add,update,delete,shuffle}/  add takes { names: [] } for bulk
   lib/
     supabaseClient.ts           browser (anon)
@@ -36,6 +37,9 @@ src/
     bracket.test.ts             vitest tests for bracket.ts
     seeding.ts                  pure roster/seed logic (bulk add, swap, shuffle)
     seeding.test.ts             vitest tests for seeding.ts
+    events.ts (+ .test.ts)      tournament name helpers
+  components/
+    Toast.tsx                   bottom-of-screen message used by the admin pages
 db/
   schema.sql                    tables + RLS policies + realtime publication
 docs/
@@ -43,14 +47,17 @@ docs/
 ```
 
 ## Data model invariants
-- Always exactly **one current event**. The "latest event" is `events` ordered by `created_at desc limit 1`. Anything that creates an extra event row will silently switch the app to it — there is no event picker UI.
+- **Current event = newest event**: `events` ordered by `created_at desc limit 1`. TD Control → *Start new tournament* inserts a row, which switches every page to it; older events are kept as history (invisible to the app) until deleted from the *Past tournaments* list. The current event can't be deleted (that would silently revive the previous one). Event names needn't be unique. The name shows on the home page, Brackets page and TD Control.
 - **Players**: exactly 16 per event, with unique `seed` 1..16. The singles builder errors out otherwise. Uniqueness is the `players_event_seed_key` constraint, which is `DEFERRABLE` (checked at end of statement), so **any seed change that touches more than one player must be a single statement**: the routes send one `upsert` of full rows. Two separate updates always fail with a duplicate key error; that was the old swap bug. Seeding logic (bulk add, swap, shuffle) lives in `src/lib/seeding.ts`.
 - **Roster lock**: once any match exists for the event, `players/update` (seed), `players/shuffle` and `players/delete` refuse with 409, because R1 holds player ids. Renames are always allowed; renaming is how to swap in a substitute.
 - **Matches**: rows are flat. `bracket ∈ {MAIN, LOWER, DOUBLES}`, `stage ∈ {R1, QF, SF, F}`. `team_a` / `team_b` are `text[]` of player IDs (length 1 for singles, 2 for doubles, `[]` for TBD).
 - **Bracket wiring** lives on each match: `feeds_winner_to` / `feeds_loser_to` point at the next match's `id`. There is no separate edges table.
 - **Canonical R1 seed pairs** (hard-coded in two routes — keep in sync): `[1,16],[8,9],[5,12],[4,13],[3,14],[6,11],[7,10],[2,15]`.
 - **R1→QF mapping**: R1 slots 0–1 → QF0, 2–3 → QF1, 4–5 → QF2, 6–7 → QF3 (where slot index = position in canonical pairs). Winners feed MAIN QFs; losers feed LOWER QFs.
-- **Doubles**: built once all 8 QFs (MAIN+LOWER) have winners. Pairs of consecutive losers form 4 teams; SF1 = team[0] vs team[3], SF2 = team[1] vs team[2]; both feed the single F.
+- **Doubles**: built once all 8 QFs (MAIN+LOWER) have winners. The 8 losers are shuffled (random draw, the club's choice), then consecutive pairs form 4 teams; SF1 = team[0] vs team[3], SF2 = team[1] vs team[2]; both feed the single F. Doubles aren't linked to the QFs by feeds, so a QF correction doesn't reach them by itself: pressing Build Doubles again runs `planDoublesSwaps` (swap the old loser for the new one in place), redraws if it can't patch, and refuses once any doubles result exists.
+- **Wiring order**: build-singles wires R1 into QFs in `qfWiringOrder` (QFs grouped by the SF they feed). Plain id order paired the semis at random; that was a bug. Already-wired R1 matches are left alone on re-runs.
+- **Display order**: the Brackets and Matches pages sort with `drawOrder` (R1 by canonical slot, later rounds by the earliest slot that feeds them), so it reflects the actual feeds. Don't sort matches by id for display.
+- **Result guards**: set-winner and clear-result refuse (409) when the match feeds a match that already has a result, and set-winner refuses while a side is TBD (`resultChangeProblem`). Otherwise the downstream match would keep a stale player.
 
 ## Admin auth model (important + thin)
 - Single shared PIN in `ADMIN_PIN` env var. Header `x-admin-pin` checked by `requireAdminPin()` (`src/lib/adminAuth.ts`). String equality.
@@ -77,8 +84,7 @@ Required env in `.env.local` (none of these are committed):
 ## Known sharp edges
 A bunch of these were patched in PRs #7–17 (see `git log`); they're worth knowing because the patterns recur:
 - The propagation logic in `set-winner`, `build-singles`, and `clear-result` is non-trivial — it has to handle re-corrections (changing a winner after downstream slots are populated). If you change one, look at the others.
-- `reset` with `regen_r1` clears all matches and rebuilds R1 only; the user must then run the singles builder to re-create QF/SF/F skeletons and re-wire feeds. The control page UI tells them this; the API does not enforce it.
-- "Latest event" is implicit. Creating a fresh `events` row in Supabase mid-tournament instantly orphans the existing players/matches from the UI.
+- "Latest event" is implicit. Starting a new tournament (or inserting an `events` row in Supabase) mid-tournament instantly hides the existing players/matches from the UI. They're still there, and deleting the new event brings them back.
 - `next.config.ts` sets `eslint.ignoreDuringBuilds: true` — lint errors will not fail a Vercel deploy.
 - Tournament UI loads on mount only — no Supabase realtime subscription. Spectators must refresh to see new winners.
 - README path citations (`【F:...】`) reference some pre-rename paths (e.g. `src/app/players/add/route.ts` instead of `src/app/api/admin/players/add/route.ts`). The architecture description is still accurate.
